@@ -1,0 +1,23 @@
+[
+  {
+    "string_map_data": {
+      "Comment": {"value": "Love this!"},
+      "Media Owner": {"value": "alice"},
+      "Time": {"value": "1700000010"}
+    }
+  },
+  {
+    "string_map_data": {
+      "Comment": {"value": "So cool"},
+      "Media Owner": {"value": "alice"},
+      "Time": {"value": "1700000020"}
+    }
+  },
+  {
+    "string_map_data": {
+      "Comment": {"value": "Nice shot"},
+      "Media Owner": {"value": "bob"},
+      "Time": {"value": "1700000030"}
+    }
+  }
+]

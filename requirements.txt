@@ -1,0 +1,6 @@
+# Core analyzer (export-based) needs only the standard library.
+# Required only for `instagram_analyzer fetch` (live Graph API mode):
+requests>=2.31
+
+# Required only for running the test suite:
+pytest>=7.4
