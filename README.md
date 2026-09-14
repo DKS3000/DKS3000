@@ -136,12 +136,46 @@ sudo python -m rf_sniffer both --iface wlan1mon --duration 300 --out logs/
 python -m rf_sniffer report --log logs/combined_20260101T000000Z.jsonl \
     --out reports/session.md --csv reports/session.csv \
     --html reports/session.html --open
+
+# Watch it live while it captures, e.g. for an hour, from another device
+sudo python -m rf_sniffer both --iface wlan1mon --duration 3600 --out logs/ --live
 ```
 
 Add `--report path/to/out.md` / `--html path/to/out.html` to
 `wifi`/`ble`/`both` to generate the report/dashboard automatically when
 the capture finishes, plus `--open` to launch the dashboard in a
 browser right away.
+
+## Watching it live (while a capture is running)
+
+Add `--live` to `wifi`/`ble`/`both` and it starts a small local web
+server for the duration of the capture, serving a dashboard that
+auto-refreshes every few seconds (`--live-refresh`, default 5s) so you
+can watch results accumulate in real time — e.g. leave a 1-hour capture
+running and watch it fill in live, from a phone/laptop/Windows browser
+on the same network, instead of waiting for it to finish:
+
+```bash
+sudo python -m rf_sniffer both --iface wlan1mon --duration 3600 --out logs/ --live --live-port 8000
+```
+
+It prints the URL to open, e.g. `http://192.168.1.42:8000/` — open
+that from any browser on the same WiFi/LAN (phone, laptop, Windows
+machine). No extra install needed on the *viewing* device; it's just a
+web page.
+
+Already have a capture running without `--live`? Point the standalone
+`live` command at the log it's writing to and it'll pick up new
+observations as they're appended, no need to restart the capture:
+
+```bash
+python -m rf_sniffer live --log logs/combined_20260101T000000Z.jsonl --port 8000
+```
+
+Each refresh does a full page reload with the latest data (simple and
+robust, though it resets any column sort/filter you had set — re-apply
+after each refresh, or just watch the summary cards and tables as they
+grow).
 
 ## Opening the dashboard
 

@@ -1,11 +1,12 @@
 """Command-line entry point for the RF recon sniffer.
 
 Usage:
-    python -m rf_sniffer wifi --iface wlan1mon --out logs/ --duration 300
-    python -m rf_sniffer ble --out logs/ --duration 300
-    python -m rf_sniffer both --iface wlan1mon --out logs/ --duration 300
+    python -m rf_sniffer wifi --iface wlan1mon --out logs/ --duration 300 --live
+    python -m rf_sniffer ble --out logs/ --duration 300 --live
+    python -m rf_sniffer both --iface wlan1mon --out logs/ --duration 300 --live
     python -m rf_sniffer report --log logs/wifi_20260101T000000Z.jsonl \\
         --out reports/session.md --html reports/session.html --open
+    python -m rf_sniffer live --log logs/wifi_20260101T000000Z.jsonl --port 8000
 
 Only run this against networks and devices you own or are explicitly
 authorized to test.
@@ -15,6 +16,7 @@ import argparse
 import os
 import sys
 import threading
+import time
 import webbrowser
 
 from .logger import SessionLogger, export_csv
@@ -26,9 +28,14 @@ def _cmd_wifi(args: argparse.Namespace) -> int:
 
     channels = [int(c) for c in args.channels.split(",")] if args.channels else DEFAULT_CHANNELS
     with SessionLogger(args.out, "wifi") as logger:
+        live_server = _maybe_start_live(logger.path, args)
         print(f"[wifi] capturing on {args.iface} -> {logger.path}")
-        count = run_wifi_sniffer(args.iface, logger, duration=args.duration,
-                                  channels=channels, hop=not args.no_hop)
+        try:
+            count = run_wifi_sniffer(args.iface, logger, duration=args.duration,
+                                      channels=channels, hop=not args.no_hop)
+        finally:
+            if live_server:
+                live_server.shutdown()
     print(f"[wifi] logged {count} observations")
     _maybe_report(logger.path, args)
     return 0
@@ -38,8 +45,13 @@ def _cmd_ble(args: argparse.Namespace) -> int:
     from .ble_sniffer import run_ble_sniffer
 
     with SessionLogger(args.out, "ble") as logger:
+        live_server = _maybe_start_live(logger.path, args)
         print(f"[ble] scanning -> {logger.path}")
-        count = run_ble_sniffer(logger, duration=args.duration)
+        try:
+            count = run_ble_sniffer(logger, duration=args.duration)
+        finally:
+            if live_server:
+                live_server.shutdown()
     print(f"[ble] logged {count} observations")
     _maybe_report(logger.path, args)
     return 0
@@ -51,6 +63,7 @@ def _cmd_both(args: argparse.Namespace) -> int:
 
     channels = [int(c) for c in args.channels.split(",")] if args.channels else DEFAULT_CHANNELS
     with SessionLogger(args.out, "combined") as logger:
+        live_server = _maybe_start_live(logger.path, args)
         print(f"[both] WiFi on {args.iface} + BLE scan -> {logger.path}")
 
         wifi_result = {}
@@ -63,12 +76,45 @@ def _cmd_both(args: argparse.Namespace) -> int:
         wifi_thread = threading.Thread(target=_run_wifi, daemon=True)
         wifi_thread.start()
 
-        ble_count = run_ble_sniffer(logger, duration=args.duration)
-        wifi_thread.join(timeout=max(args.duration or 0, 5) + 5)
+        try:
+            ble_count = run_ble_sniffer(logger, duration=args.duration)
+            wifi_thread.join(timeout=max(args.duration or 0, 5) + 5)
+        finally:
+            if live_server:
+                live_server.shutdown()
 
     print(f"[both] logged {wifi_result.get('count', 0)} WiFi + {ble_count} BLE observations")
     _maybe_report(logger.path, args)
     return 0
+
+
+def _cmd_live(args: argparse.Namespace) -> int:
+    from .live_server import start_live_server
+
+    if not os.path.exists(args.log):
+        raise FileNotFoundError(
+            f"{args.log} does not exist yet. Point --log at the .jsonl file a capture "
+            "is currently writing to (or already wrote), e.g. logs/combined_....jsonl."
+        )
+
+    server = start_live_server(args.log, port=args.port, refresh_seconds=args.refresh)
+    print("[live] watching the log for new observations. Press Ctrl-C to stop.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
+    return 0
+
+
+def _maybe_start_live(log_path: str, args: argparse.Namespace):
+    if not getattr(args, "live", False):
+        return None
+    from .live_server import start_live_server
+
+    return start_live_server(log_path, port=args.live_port, refresh_seconds=args.live_refresh)
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
@@ -115,6 +161,12 @@ def _add_common_capture_args(parser: argparse.ArgumentParser) -> None:
                          help="Optional path to also write an HTML dashboard when done")
     parser.add_argument("--open", action="store_true",
                          help="Open the HTML dashboard in a browser when done (needs --html)")
+    parser.add_argument("--live", action="store_true",
+                         help="Serve a self-refreshing dashboard at http://<this-device>:<port>/ "
+                              "while capturing, so you can watch it update live from another device")
+    parser.add_argument("--live-port", type=int, default=8000, help="Port for --live (default: 8000)")
+    parser.add_argument("--live-refresh", type=float, default=5.0,
+                         help="Seconds between auto-refreshes for --live (default: 5)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -149,6 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--open", action="store_true",
                            help="Open the HTML dashboard in a browser when done (needs --html)")
     p_report.set_defaults(func=_cmd_report)
+
+    p_live = sub.add_parser("live", help="Serve a self-refreshing dashboard for a log that's still growing")
+    p_live.add_argument("--log", required=True,
+                         help="Path to the .jsonl log a capture is writing to (or already wrote)")
+    p_live.add_argument("--port", type=int, default=8000, help="Port to serve on (default: 8000)")
+    p_live.add_argument("--refresh", type=float, default=5.0,
+                         help="Seconds between auto-refreshes (default: 5)")
+    p_live.set_defaults(func=_cmd_live)
 
     return parser
 
