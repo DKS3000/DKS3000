@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>netwatch console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+  <div class="console">
+    <header class="console-header">
+      <h1>netwatch</h1>
+      <div id="summary" class="summary">loading&hellip;</div>
+    </header>
+
+    <section class="panel" id="ip-panel">
+      <div class="panel-header">
+        <h2>IP monitor &mdash; wake / sleep</h2>
+        <div class="filters">
+          <input type="text" id="ip-q" placeholder="filter ip / hostname">
+          <select id="ip-status">
+            <option value="">any status</option>
+            <option value="up">up</option>
+            <option value="down">down</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="ip-status-table">
+          <thead>
+            <tr><th>IP</th><th>Hostname</th><th>Status</th><th>Since</th><th>Last checked</th><th>RTT (ms)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel-header">
+        <h3>Wake / sleep history</h3>
+        <div class="filters">
+          <input type="text" id="ev-ip" placeholder="ip">
+          <select id="ev-status">
+            <option value="">any transition</option>
+            <option value="up">wake (up)</option>
+            <option value="down">sleep (down)</option>
+          </select>
+          <input type="datetime-local" id="ev-since" title="since">
+          <input type="datetime-local" id="ev-until" title="until">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="ip-events-table">
+          <thead>
+            <tr><th>Timestamp</th><th>IP</th><th>Hostname</th><th>Transition</th><th>RTT (ms)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="conn-panel">
+      <div class="panel-header">
+        <h2>MAC / BSSID connection records</h2>
+        <div class="filters">
+          <input type="text" id="conn-q" placeholder="search all fields">
+          <select id="conn-kind">
+            <option value="">wifi + ble</option>
+            <option value="wifi">wifi</option>
+            <option value="ble">ble</option>
+          </select>
+          <input type="text" id="conn-mac" placeholder="mac / address">
+          <input type="text" id="conn-bssid" placeholder="bssid">
+          <input type="text" id="conn-ssid" placeholder="ssid / name">
+          <input type="text" id="conn-vendor" placeholder="vendor">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="connections-table">
+          <thead>
+            <tr>
+              <th>Timestamp</th><th>Kind</th><th>Type</th><th>MAC</th><th>BSSID</th>
+              <th>SSID / Name</th><th>Vendor</th><th>Encryption</th><th>RSSI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0f10;
+  --panel: #11181a;
+  --border: #23302f;
+  --text: #d7e3e0;
+  --muted: #7f9490;
+  --accent: #35e0a5;
+  --danger: #ff5f6b;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.console {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.console-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+}
+
+.console-header h1 {
+  margin: 0;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  font-size: 18px;
+}
+
+.summary { color: var(--muted); font-size: 12px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.panel-header h2, .panel-header h3 {
+  margin: 4px 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filters input, .filters select {
+  background: #0d1415;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 640px;
+  font-size: 12px;
+}
+
+th, td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+tr.status-down { background: rgba(255, 95, 107, 0.08); }
+tr.status-up { background: rgba(53, 224, 165, 0.05); }
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.badge-up { background: rgba(53, 224, 165, 0.15); color: var(--accent); }
+.badge-down { background: rgba(255, 95, 107, 0.15); color: var(--danger); }
+
+.empty { color: var(--muted); text-align: center; }
+
+@media (max-width: 480px) {
+  .console { padding: 10px; }
+}

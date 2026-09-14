@@ -8,5 +8,8 @@ scapy>=2.5
 # Required only for rf_sniffer's `ble`/`both` commands (BLE scanning):
 bleak>=0.21
 
+# Required only for netwatch's `serve` command (IP + RF monitoring web console):
+Flask>=3.0
+
 # Required only for running the test suite:
 pytest>=7.4

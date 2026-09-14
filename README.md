@@ -165,3 +165,50 @@ Each JSONL line is one observation. WiFi records include
 turns a log into a markdown table per access point / probing client /
 BLE device (packet counts, strongest RSSI seen, first/last seen), plus
 optional CSV export for further analysis in a spreadsheet or notebook.
+
+---
+
+# netwatch: monitoring console
+
+A dedicated web console that puts full network monitoring in one dashboard:
+IP host **wake/sleep** transitions (active ICMP polling, with timestamps)
+alongside the **MAC/BSSID connection records** captured by `rf_sniffer`
+(passive WiFi + BLE) — each table with its own data-filter options.
+
+## Setup
+
+```bash
+pip install -r requirements.txt   # installs Flask
+```
+
+## Usage
+
+```bash
+# Watch a list of hosts (one "ip" or "ip,hostname" per line) and the
+# rf_sniffer logs in logs/, on http://127.0.0.1:8080/
+python -m netwatch serve --hosts hosts.txt --rf-log-dir logs/
+
+# Or pass targets inline, and/or a specific rf_sniffer log file
+python -m netwatch serve --host 10.0.0.1:router --host 10.0.0.2 \
+    --rf-log logs/combined_20260101T000000Z.jsonl --port 8080
+```
+
+`serve` starts a background poller that pings every configured host on
+`--interval` seconds (default 30) and logs every up→down ("sleep") or
+down→up ("wake") transition, timestamped, to `<ip-log-dir>/ip_events_*.jsonl`
+— the same append-only JSONL format `rf_sniffer` uses. It also tails
+whichever `rf_sniffer` WiFi/BLE logs you point it at (`--rf-log`, repeatable,
+and/or `--rf-log-dir` to pick up a whole folder), so captures from an
+in-progress or finished `rf_sniffer` session show up live.
+
+The console (`/`) shows:
+
+- **IP monitor** — current up/down status per host, plus the full wake/sleep
+  history, filterable by IP/hostname, status, and time range.
+- **MAC/BSSID connection records** — every WiFi and BLE observation, unified
+  into one table, filterable by MAC/address, BSSID, SSID/name, vendor,
+  encryption, WiFi-vs-BLE, and a free-text search across all fields.
+
+The same data is available as JSON for scripting: `GET /api/ip/status`,
+`/api/ip/events`, `/api/connections`, `/api/summary` (all accept the same
+filters as query parameters).
