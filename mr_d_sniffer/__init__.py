@@ -1,4 +1,4 @@
-"""RF Recon: WiFi + BLE sniffer for authorized security research.
+"""Mr D Sniffer: WiFi + BLE sniffer for authorized security research.
 
 Passive 802.11 (WiFi) and Bluetooth Low Energy reconnaissance with
 detailed, structured logging. Intended for use on networks/devices you

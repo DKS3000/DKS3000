@@ -1,11 +1,12 @@
-"""Command-line entry point for the RF recon sniffer.
+"""Mr D Sniffer: command-line entry point for the RF recon sniffer.
 
 Usage:
-    python -m rf_sniffer wifi --iface wlan1mon --out logs/ --duration 300
-    python -m rf_sniffer ble --out logs/ --duration 300
-    python -m rf_sniffer both --iface wlan1mon --out logs/ --duration 300
-    python -m rf_sniffer report --log logs/wifi_20260101T000000Z.jsonl \\
+    python -m mr_d_sniffer wifi --iface wlan1mon --out logs/ --duration 300
+    python -m mr_d_sniffer ble --out logs/ --duration 300
+    python -m mr_d_sniffer both --iface wlan1mon --out logs/ --duration 300
+    python -m mr_d_sniffer report --log logs/wifi_20260101T000000Z.jsonl \\
         --out reports/session.md --html reports/session.html --open
+    python -m mr_d_sniffer live --log logs/wifi_20260101T000000Z.jsonl --port 8000
 
 Only run this against networks and devices you own or are explicitly
 authorized to test.
@@ -146,7 +147,7 @@ def _add_common_capture_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="rf_sniffer", description=__doc__,
+    parser = argparse.ArgumentParser(prog="mr_d_sniffer", description=__doc__,
                                       formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
 
