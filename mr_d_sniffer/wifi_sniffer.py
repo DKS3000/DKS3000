@@ -95,6 +95,24 @@ def extract_device_name(pkt) -> Optional[str]:
     return None
 
 
+def extract_client_ip(pkt, to_ds: bool, from_ds: bool) -> Optional[str]:
+    """The client's IP address from a data frame's IP layer, when decodable.
+
+    Only possible on open (unencrypted) networks - on WPA/WPA2/WPA3 the
+    payload after the 802.11 header is ciphertext without the session key,
+    so scapy won't find a valid IP layer and this stays None."""
+    from scapy.layers.inet import IP
+
+    if not pkt.haslayer(IP):
+        return None
+    ip_layer = pkt.getlayer(IP)
+    if to_ds and not from_ds:
+        return ip_layer.src  # client -> AP
+    if from_ds and not to_ds:
+        return ip_layer.dst  # AP -> client
+    return None
+
+
 def extract_rssi(pkt) -> Optional[int]:
     if hasattr(pkt, "dBm_AntSignal") and pkt.dBm_AntSignal is not None:
         return int(pkt.dBm_AntSignal)
@@ -154,12 +172,19 @@ def parse_packet(pkt) -> Optional[WifiObservation]:
         )
 
     if dot11.type == 2:  # data frame -> confirms an active BSSID<->client link
+        to_ds = bool(dot11.FCfield & 0x1)
+        from_ds = bool(dot11.FCfield & 0x2)
+        if from_ds and not to_ds:
+            bssid, client = dot11.addr2, dot11.addr1  # AP -> client
+        else:
+            bssid, client = (dot11.addr1 or dot11.addr3), dot11.addr2  # client -> AP (or ad-hoc/WDS)
         return WifiObservation(
             frame_type="data",
-            bssid=dot11.addr1 if dot11.addr1 else dot11.addr3,
-            client_mac=dot11.addr2,
+            bssid=bssid,
+            client_mac=client,
             rssi=extract_rssi(pkt),
-            vendor=lookup_mac_vendor(dot11.addr2),
+            vendor=lookup_mac_vendor(client),
+            ip_address=extract_client_ip(pkt, to_ds, from_ds),
         )
 
     return None

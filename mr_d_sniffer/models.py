@@ -23,6 +23,7 @@ class WifiObservation:
     encryption: Optional[str] = None  # "OPEN" | "WEP" | "WPA" | "WPA2" | "WPA3"
     vendor: Optional[str] = None
     device_name: Optional[str] = None  # from a WPS "Device Name" element, when a client advertises one
+    ip_address: Optional[str] = None  # from a data frame's IP layer; only decodable on open (unencrypted) networks
 
 
 @dataclass

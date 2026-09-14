@@ -70,7 +70,7 @@ def summarize(records: list[dict]) -> dict:
         if r.get("rssi") is not None:
             d["best_rssi"] = r["rssi"] if d["best_rssi"] is None else max(d["best_rssi"], r["rssi"])
 
-    connections = defaultdict(lambda: {"count": 0, "vendor": None, "best_rssi": None})
+    connections = defaultdict(lambda: {"count": 0, "vendor": None, "best_rssi": None, "ip_address": None})
     for r in wifi:
         if r.get("frame_type") != "data":
             continue
@@ -81,12 +81,14 @@ def summarize(records: list[dict]) -> dict:
         conn["count"] += 1
         if r.get("vendor"):
             conn["vendor"] = r["vendor"]
+        if r.get("ip_address"):
+            conn["ip_address"] = r["ip_address"]
         if r.get("rssi") is not None:
             conn["best_rssi"] = r["rssi"] if conn["best_rssi"] is None else max(conn["best_rssi"], r["rssi"])
 
     connected_clients = [
         {"bssid": bssid, "client_mac": client, "ssids": sorted(aps[bssid]["ssids"]) if bssid in aps else [],
-         "name": client_names.get(client), "vendor": info["vendor"],
+         "name": client_names.get(client), "vendor": info["vendor"], "ip_address": info["ip_address"],
          "best_rssi": info["best_rssi"], "count": info["count"]}
         for (bssid, client), info in sorted(connections.items(), key=lambda kv: -kv[1]["count"])
     ]
@@ -146,14 +148,15 @@ def render_markdown(summary: dict, source_path: str) -> str:
     if connected:
         lines.append(f"## Connected Clients ({len(connected)} AP&ndash;client associations)")
         lines.append("")
-        lines.append("| BSSID | SSID(s) | Client MAC | Name | Vendor | Best RSSI | Frames |")
-        lines.append("|---|---|---|---|---|---|---|")
+        lines.append("| BSSID | SSID(s) | Client MAC | Name | IP Address | Vendor | Best RSSI | Frames |")
+        lines.append("|---|---|---|---|---|---|---|---|")
         for conn in connected:
             ssids = ", ".join(conn["ssids"]) or "(unknown)"
             name = conn.get("name") or "?"
+            ip_address = conn.get("ip_address") or "?"
             vendor = conn["vendor"] or "?"
             rssi = conn["best_rssi"] if conn["best_rssi"] is not None else "?"
-            lines.append(f"| {conn['bssid']} | {ssids} | {conn['client_mac']} | {name} | {vendor} | {rssi} | {conn['count']} |")
+            lines.append(f"| {conn['bssid']} | {ssids} | {conn['client_mac']} | {name} | {ip_address} | {vendor} | {rssi} | {conn['count']} |")
         lines.append("")
 
     devices = summary["ble_devices"]
@@ -236,10 +239,11 @@ def _connection_rows_html(connections: list) -> str:
     for conn in connections:
         ssids = _html_escape(", ".join(conn["ssids"]) or "(unknown)")
         name = _html_escape(conn.get("name") or "?")
+        ip_address = _html_escape(conn.get("ip_address") or "?")
         vendor = _html_escape(conn["vendor"] or "?")
         rows.append(
             f"<tr><td>{_html_escape(conn['bssid'])}</td><td>{ssids}</td>"
-            f"<td>{_html_escape(conn['client_mac'])}</td><td>{name}</td><td>{vendor}</td>"
+            f"<td>{_html_escape(conn['client_mac'])}</td><td>{name}</td><td>{ip_address}</td><td>{vendor}</td>"
             f"<td>{_signal_cell(conn['best_rssi'])}</td><td>{conn['count']}</td></tr>"
         )
     return "".join(rows)
@@ -409,8 +413,8 @@ def render_html(summary: dict, source_path: str) -> str:
         {4}, _client_rows_html(clients), "No probing WiFi clients captured.",
     )
     conn_table = _table(
-        "conn-table", ["BSSID", "SSID(s)", "Client MAC", "Name", "Vendor", "Best RSSI", "Frames"],
-        {6}, _connection_rows_html(connections), "No connected clients captured yet.",
+        "conn-table", ["BSSID", "SSID(s)", "Client MAC", "Name", "IP Address", "Vendor", "Best RSSI", "Frames"],
+        {7}, _connection_rows_html(connections), "No connected clients captured yet.",
     )
     ble_table = _table(
         "ble-table", ["Address", "Name", "Vendor", "Best RSSI", "Advertisements"],

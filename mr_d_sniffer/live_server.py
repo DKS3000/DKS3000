@@ -250,7 +250,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <p class="muted">Devices actively associated with an access point (from 802.11 data frames), not just probing for one.</p>
 <input type="search" data-filter-for="conn-table" placeholder="Filter by BSSID, SSID, client MAC, vendor...">
 <table id="conn-table">
-<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">IP Address</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -307,11 +307,11 @@ function buildClientRows(clients) {
 }
 
 function buildConnRows(connections) {
-  if (!connections.length) return emptyRow(7, "No connected clients captured yet.");
+  if (!connections.length) return emptyRow(8, "No connected clients captured yet.");
   return connections.map(conn => {
     const ssids = (conn.ssids && conn.ssids.length) ? conn.ssids.join(", ") : "(unknown)";
     return `<tr><td>${esc(conn.bssid)}</td><td>${esc(ssids)}</td><td>${esc(conn.client_mac)}</td>` +
-           `<td>${esc(conn.name || "?")}</td><td>${esc(conn.vendor || "?")}</td>` +
+           `<td>${esc(conn.name || "?")}</td><td>${esc(conn.ip_address || "?")}</td><td>${esc(conn.vendor || "?")}</td>` +
            `<td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td></tr>`;
   }).join("");
 }
@@ -428,7 +428,8 @@ function wifiLine(rec) {
   if (ft === "probe_resp") {
     return `<span class="feed-ts">${ts}</span> <b>PROBE_RESP</b> bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)} ssid=${esc(rec.ssid || "?")} rssi=${esc(rec.rssi ?? "?")}`;
   }
-  return `<span class="feed-ts">${ts}</span> <b>DATA</b>       bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)} rssi=${esc(rec.rssi ?? "?")}`;
+  const ip = rec.ip_address ? ` ip=${esc(rec.ip_address)}` : "";
+  return `<span class="feed-ts">${ts}</span> <b>DATA</b>       bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)}${ip} rssi=${esc(rec.rssi ?? "?")}`;
 }
 
 function bleLine(rec) {
