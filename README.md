@@ -136,12 +136,38 @@ sudo python -m rf_sniffer both --iface wlan1mon --duration 300 --out logs/
 python -m rf_sniffer report --log logs/combined_20260101T000000Z.jsonl \
     --out reports/session.md --csv reports/session.csv \
     --html reports/session.html --open
+
+# Live-updating dashboard while a capture is still running (or after)
+python -m rf_sniffer live --log logs/combined_20260101T000000Z.jsonl --port 8000
 ```
 
 Add `--report path/to/out.md` / `--html path/to/out.html` to
 `wifi`/`ble`/`both` to generate the report/dashboard automatically when
 the capture finishes, plus `--open` to launch the dashboard in a
 browser right away.
+
+## Live dashboard
+
+`report --html` writes a static snapshot; `live` instead starts a small
+HTTP server (stdlib only) that re-reads the `.jsonl` log on every
+browser poll (every 2s by default, `--interval` to change it), so the
+page keeps updating while `wifi`/`ble`/`both` is still appending to the
+same file — point it at a log that's mid-capture in another terminal:
+
+```bash
+# terminal 1: capturing
+python -m rf_sniffer ble --out logs/
+
+# terminal 2: watch it live (pick the .jsonl path that terminal 1 printed)
+python -m rf_sniffer live --log logs/ble_20260101T000000Z.jsonl --port 8000 --open
+```
+
+Then visit `http://localhost:8000/` (or `http://raspberrypi.local:8000/`
+from another device on the network, e.g. to watch a headless Pi's
+capture from a Windows/Mac browser). It tolerates the log's last line
+being mid-write. Same sortable/filterable tables as the static
+dashboard, plus a connection-status indicator. Stop the server with
+Ctrl-C; it doesn't stop the capture itself, which is a separate process.
 
 ## Opening the dashboard
 

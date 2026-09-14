@@ -86,6 +86,13 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_live(args: argparse.Namespace) -> int:
+    from .live_server import run_live_server
+
+    run_live_server(args.log, args.port, interval=args.interval, open_browser=args.open)
+    return 0
+
+
 def _open_dashboard(html_path) -> None:
     if not html_path:
         print("Error: --open needs --html to know which file to open.", file=sys.stderr)
@@ -149,6 +156,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--open", action="store_true",
                            help="Open the HTML dashboard in a browser when done (needs --html)")
     p_report.set_defaults(func=_cmd_report)
+
+    p_live = sub.add_parser("live", help="Serve a live-updating dashboard for an in-progress or finished capture")
+    p_live.add_argument("--log", required=True, help="Path to the .jsonl session log to watch (can still be growing)")
+    p_live.add_argument("--port", type=int, default=8000, help="HTTP port to serve on (default: 8000)")
+    p_live.add_argument("--interval", type=float, default=2.0,
+                         help="Seconds between dashboard refreshes (default: 2)")
+    p_live.add_argument("--open", action="store_true",
+                         help="Open the dashboard in a browser once the server starts")
+    p_live.set_defaults(func=_cmd_live)
 
     return parser
 
