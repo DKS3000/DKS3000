@@ -437,7 +437,7 @@ let lastBeepAt = 0;
 const BEEP_FREQ = { beacon: 880, probe_req: 660, probe_resp: 740, data: 520, ble: 1300 };
 
 function beep(kind) {
-  if (!soundEnabled || !audioCtx) return;
+  if (!soundEnabled || !audioCtx || audioCtx.state !== "running") return;
   const now = performance.now();
   if (now - lastBeepAt < 120) return; // throttle so a burst of frames isn't a solid tone
   lastBeepAt = now;
@@ -445,39 +445,54 @@ function beep(kind) {
   const gain = audioCtx.createGain();
   osc.type = "sine";
   osc.frequency.value = BEEP_FREQ[kind] || 600;
-  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.09);
+  gain.gain.setValueAtTime(0.16, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.14);
   osc.connect(gain).connect(audioCtx.destination);
   osc.start();
-  osc.stop(audioCtx.currentTime + 0.1);
+  osc.stop(audioCtx.currentTime + 0.15);
 }
 
 const soundToggle = document.getElementById("sound-toggle");
-soundToggle.textContent = soundEnabled ? "🔊 Sound: On" : "🔇 Sound: Off";
+
+function updateSoundLabel() {
+  if (!soundEnabled) { soundToggle.textContent = "🔇 Sound: Off"; return; }
+  if (audioCtx && audioCtx.state === "running") { soundToggle.textContent = "🔊 Sound: On"; return; }
+  soundToggle.textContent = "🔈 Click to enable sound";
+}
+updateSoundLabel();
 
 function ensureAudioCtx() {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      return;
+    }
   }
-  if (audioCtx.state === "suspended") audioCtx.resume();
+  if (audioCtx.state === "suspended") audioCtx.resume().then(updateSoundLabel);
+  else updateSoundLabel();
 }
 
-soundToggle.addEventListener("click", () => {
-  soundEnabled = !soundEnabled;
-  if (soundEnabled) ensureAudioCtx();
-  soundToggle.textContent = soundEnabled ? "🔊 Sound: On" : "🔇 Sound: Off";
+// Browsers refuse to actually play audio until a real user gesture (click or
+// keypress) happens, no matter what the code does - the label above is
+// honest about this ("click to enable") instead of falsely claiming sound
+// is already on. Any click/keydown anywhere unlocks it, not just the toggle.
+soundToggle.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (soundEnabled && audioCtx && audioCtx.state === "running") {
+    soundEnabled = false;
+    updateSoundLabel();
+  } else {
+    soundEnabled = true;
+    ensureAudioCtx();
+  }
 });
 
-// Browsers block audio until a user gesture. Sound defaults to on, so unlock
-// it on the very first click/keypress anywhere on the page, not just the
-// toggle button.
-function unlockAudioOnce() {
+function unlockAudioOnAnyInteraction() {
   if (soundEnabled) ensureAudioCtx();
-  document.removeEventListener("click", unlockAudioOnce);
-  document.removeEventListener("keydown", unlockAudioOnce);
 }
-document.addEventListener("click", unlockAudioOnce);
-document.addEventListener("keydown", unlockAudioOnce);
+document.addEventListener("click", unlockAudioOnAnyInteraction);
+document.addEventListener("keydown", unlockAudioOnAnyInteraction);
 
 function appendFeedLine(panelId, html, cls) {
   const panel = document.getElementById(panelId);
