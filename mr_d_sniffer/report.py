@@ -62,6 +62,26 @@ def summarize(records: list[dict]) -> dict:
         if r.get("rssi") is not None:
             d["best_rssi"] = r["rssi"] if d["best_rssi"] is None else max(d["best_rssi"], r["rssi"])
 
+    connections = defaultdict(lambda: {"count": 0, "vendor": None, "best_rssi": None})
+    for r in wifi:
+        if r.get("frame_type") != "data":
+            continue
+        bssid, client = r.get("bssid"), r.get("client_mac")
+        if not bssid or not client:
+            continue
+        conn = connections[(bssid, client)]
+        conn["count"] += 1
+        if r.get("vendor"):
+            conn["vendor"] = r["vendor"]
+        if r.get("rssi") is not None:
+            conn["best_rssi"] = r["rssi"] if conn["best_rssi"] is None else max(conn["best_rssi"], r["rssi"])
+
+    connected_clients = [
+        {"bssid": bssid, "client_mac": client, "ssids": sorted(aps[bssid]["ssids"]) if bssid in aps else [],
+         "vendor": info["vendor"], "best_rssi": info["best_rssi"], "count": info["count"]}
+        for (bssid, client), info in sorted(connections.items(), key=lambda kv: -kv[1]["count"])
+    ]
+
     return {
         "total_records": len(records),
         "first_seen": timestamps[0] if timestamps else None,
@@ -71,6 +91,7 @@ def summarize(records: list[dict]) -> dict:
         "access_points": dict(aps),
         "wifi_clients": dict(clients),
         "ble_devices": dict(devices),
+        "connected_clients": connected_clients,
     }
 
 
@@ -109,6 +130,19 @@ def render_markdown(summary: dict, source_path: str) -> str:
             ssids = ", ".join(sorted(info["ssids_probed"])) or "(broadcast)"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
             lines.append(f"| {mac} | {ssids} | {rssi} | {info['count']} |")
+        lines.append("")
+
+    connected = summary.get("connected_clients") or []
+    if connected:
+        lines.append(f"## Connected Clients ({len(connected)} AP&ndash;client associations)")
+        lines.append("")
+        lines.append("| BSSID | SSID(s) | Client MAC | Vendor | Best RSSI | Frames |")
+        lines.append("|---|---|---|---|---|---|")
+        for conn in connected:
+            ssids = ", ".join(conn["ssids"]) or "(unknown)"
+            vendor = conn["vendor"] or "?"
+            rssi = conn["best_rssi"] if conn["best_rssi"] is not None else "?"
+            lines.append(f"| {conn['bssid']} | {ssids} | {conn['client_mac']} | {vendor} | {rssi} | {conn['count']} |")
         lines.append("")
 
     devices = summary["ble_devices"]
@@ -185,6 +219,19 @@ def _client_rows_html(clients: dict) -> str:
     return "".join(rows)
 
 
+def _connection_rows_html(connections: list) -> str:
+    rows = []
+    for conn in connections:
+        ssids = _html_escape(", ".join(conn["ssids"]) or "(unknown)")
+        vendor = _html_escape(conn["vendor"] or "?")
+        rows.append(
+            f"<tr><td>{_html_escape(conn['bssid'])}</td><td>{ssids}</td>"
+            f"<td>{_html_escape(conn['client_mac'])}</td><td>{vendor}</td>"
+            f"<td>{_signal_cell(conn['best_rssi'])}</td><td>{conn['count']}</td></tr>"
+        )
+    return "".join(rows)
+
+
 def _ble_rows_html(devices: dict) -> str:
     rows = []
     for addr, info in sorted(devices.items(), key=lambda kv: -kv[1]["count"]):
@@ -201,16 +248,27 @@ _HTML_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>RF Recon Session Report</title>
+<title>Mr D Sniffer - Session Report</title>
 <style>
   :root {{ color-scheme: light dark; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         max-width: 1100px; margin: 0 auto; padding: 24px 16px; line-height: 1.5; }}
-  h1 {{ margin-bottom: 4px; }}
+         max-width: 1100px; margin: 0 auto; padding: 0 16px 24px; line-height: 1.5; }}
+  .banner {{
+    margin: 0 -16px 20px; padding: 22px 16px 26px;
+    background: linear-gradient(120deg, #6a3df5, #d5309a 45%, #ff7a3d 85%);
+    color: #fff; border-radius: 0 0 18px 18px;
+  }}
+  .banner h1 {{ margin: 0 0 2px; font-size: 1.6em; }}
+  .banner .muted {{ opacity: .92; }}
   .muted {{ opacity: .65; font-size: .9em; }}
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }}
-  .card {{ border: 1px solid currentColor; border-radius: 10px; padding: 14px; opacity: .95; }}
-  .card .n {{ font-size: 1.6em; font-weight: 700; display: block; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }}
+  .card {{ border-radius: 12px; padding: 14px; color: #fff; }}
+  .card .n {{ font-size: 1.7em; font-weight: 700; display: block; }}
+  .card-total {{ background: linear-gradient(135deg, #3a86ff, #2667cc); }}
+  .card-ap {{ background: linear-gradient(135deg, #58a6ff, #2f6fd6); }}
+  .card-client {{ background: linear-gradient(135deg, #ffa657, #e8722c); }}
+  .card-conn {{ background: linear-gradient(135deg, #d2a8ff, #9b5de5); }}
+  .card-ble {{ background: linear-gradient(135deg, #7ee787, #2f9e44); }}
   table {{ border-collapse: collapse; width: 100%; margin: 8px 0 28px; }}
   th, td {{ text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }}
   th {{ cursor: pointer; user-select: none; white-space: nowrap; }}
@@ -227,14 +285,17 @@ _HTML_TEMPLATE = """<!doctype html>
 </style>
 </head>
 <body>
-<h1>RF Recon Session Report</h1>
-<p class="muted">Source: {source} &middot; Generated: {generated} &middot; Range: {first_seen} &rarr; {last_seen}</p>
+<div class="banner">
+  <h1>🛰️ Mr D Sniffer</h1>
+  <p class="muted">Source: {source} &middot; Generated: {generated} &middot; Range: {first_seen} &rarr; {last_seen}</p>
+</div>
 
 <section class="grid">
-  <div class="card"><span class="n">{total_records}</span>Total records</div>
-  <div class="card"><span class="n">{ap_count}</span>Access points</div>
-  <div class="card"><span class="n">{client_count}</span>Probing clients</div>
-  <div class="card"><span class="n">{ble_count}</span>BLE devices</div>
+  <div class="card card-total"><span class="n">{total_records}</span>Total records</div>
+  <div class="card card-ap"><span class="n">{ap_count}</span>Access points</div>
+  <div class="card card-client"><span class="n">{client_count}</span>Probing clients</div>
+  <div class="card card-conn"><span class="n">{conn_count}</span>Connected clients</div>
+  <div class="card card-ble"><span class="n">{ble_count}</span>BLE devices</div>
 </section>
 
 <section>
@@ -247,6 +308,13 @@ _HTML_TEMPLATE = """<!doctype html>
 <h2>WiFi Probing Clients</h2>
 <input type="search" data-filter-for="client-table" placeholder="Filter by MAC or SSID...">
 {client_table}
+</section>
+
+<section>
+<h2>Connected Clients</h2>
+<p class="muted">Devices seen actively associated with an access point (from 802.11 data frames), not just probing for one.</p>
+<input type="search" data-filter-for="conn-table" placeholder="Filter by BSSID, SSID, client MAC, vendor...">
+{conn_table}
 </section>
 
 <section>
@@ -304,6 +372,7 @@ def render_html(summary: dict, source_path: str) -> str:
     aps = summary["access_points"]
     clients = summary["wifi_clients"]
     devices = summary["ble_devices"]
+    connections = summary.get("connected_clients") or []
 
     def _table(table_id, headers, numeric_cols, rows_html, empty_msg):
         if not rows_html:
@@ -321,6 +390,10 @@ def render_html(summary: dict, source_path: str) -> str:
         "client-table", ["Client MAC", "SSIDs Probed", "Best RSSI", "Frames"],
         {3}, _client_rows_html(clients), "No probing WiFi clients captured.",
     )
+    conn_table = _table(
+        "conn-table", ["BSSID", "SSID(s)", "Client MAC", "Vendor", "Best RSSI", "Frames"],
+        {5}, _connection_rows_html(connections), "No connected clients captured yet.",
+    )
     ble_table = _table(
         "ble-table", ["Address", "Name", "Vendor", "Best RSSI", "Advertisements"],
         {4}, _ble_rows_html(devices), "No BLE devices captured.",
@@ -334,9 +407,11 @@ def render_html(summary: dict, source_path: str) -> str:
         total_records=summary["total_records"],
         ap_count=len(aps),
         client_count=len(clients),
+        conn_count=len(connections),
         ble_count=len(devices),
         ap_table=ap_table,
         client_table=client_table,
+        conn_table=conn_table,
         ble_table=ble_table,
     )
 

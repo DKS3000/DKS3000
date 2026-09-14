@@ -52,6 +52,7 @@ def summary_to_json(summary: dict) -> dict:
         "access_points": _jsonable_group(summary["access_points"]),
         "wifi_clients": _jsonable_group(summary["wifi_clients"]),
         "ble_devices": _jsonable_group(summary["ble_devices"]),
+        "connected_clients": summary.get("connected_clients") or [],
     }
 
 
@@ -134,15 +135,31 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         max-width: 1100px; margin: 0 auto; padding: 24px 16px; line-height: 1.5; }
-  h1 { margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+         max-width: 1100px; margin: 0 auto; padding: 0 16px 24px; line-height: 1.5; }
+  .banner {
+    margin: 0 -16px 20px; padding: 22px 16px 26px;
+    background: linear-gradient(120deg, #6a3df5, #d5309a 45%, #ff7a3d 85%);
+    color: #fff; border-radius: 0 0 18px 18px;
+  }
+  .banner h1 { margin: 0 0 2px; display: flex; align-items: center; gap: 10px; font-size: 1.6em; }
+  .banner .sub { opacity: .92; font-size: .85em; }
+  .banner .sub b { font-weight: 700; }
+  #status { font-size: .7em; padding: 3px 9px; border-radius: 999px; font-weight: 600; background: rgba(255,255,255,.22); }
+  #status.err { background: rgba(0,0,0,.35); }
+  #sound-toggle {
+    font: inherit; font-size: .75em; cursor: pointer; border: 1px solid rgba(255,255,255,.6);
+    background: rgba(255,255,255,.15); color: #fff; border-radius: 999px; padding: 4px 12px; margin-left: auto;
+  }
+  #sound-toggle:hover { background: rgba(255,255,255,.28); }
   .muted { opacity: .65; font-size: .9em; }
-  #status { font-size: .7em; padding: 3px 9px; border-radius: 999px; font-weight: 600; }
-  #status.ok { background: rgba(47,158,68,.18); color: #2f9e44; }
-  #status.err { background: rgba(224,49,49,.18); color: #e03131; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }
-  .card { border: 1px solid currentColor; border-radius: 10px; padding: 14px; opacity: .95; }
-  .card .n { font-size: 1.6em; font-weight: 700; display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+  .card { border-radius: 12px; padding: 14px; color: #fff; }
+  .card .n { font-size: 1.7em; font-weight: 700; display: block; }
+  .card-total { background: linear-gradient(135deg, #3a86ff, #2667cc); }
+  .card-ap { background: linear-gradient(135deg, #58a6ff, #2f6fd6); }
+  .card-client { background: linear-gradient(135deg, #ffa657, #e8722c); }
+  .card-conn { background: linear-gradient(135deg, #d2a8ff, #9b5de5); }
+  .card-ble { background: linear-gradient(135deg, #7ee787, #2f9e44); }
   table { border-collapse: collapse; width: 100%; margin: 8px 0 28px; }
   th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }
   th { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -178,14 +195,18 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 </style>
 </head>
 <body>
-<h1>RF Recon - Live <span id="status" class="ok">Connecting...</span></h1>
-<p class="muted">Source: __SOURCE__ &middot; <span id="meta">waiting for first update...</span></p>
+<div class="banner">
+  <h1>🛰️ Mr D Sniffer <span id="status" class="ok">Connecting...</span>
+      <button id="sound-toggle" type="button">🔇 Sound: Off</button></h1>
+  <div class="sub">Live RF Recon Dashboard &middot; Source: <b>__SOURCE__</b> &middot; <span id="meta">waiting for first update...</span></div>
+</div>
 
 <section class="grid">
-  <div class="card"><span class="n" id="stat-total">0</span>Total records</div>
-  <div class="card"><span class="n" id="stat-ap">0</span>Access points</div>
-  <div class="card"><span class="n" id="stat-client">0</span>Probing clients</div>
-  <div class="card"><span class="n" id="stat-ble">0</span>BLE devices</div>
+  <div class="card card-total"><span class="n" id="stat-total">0</span>Total records</div>
+  <div class="card card-ap"><span class="n" id="stat-ap">0</span>Access points</div>
+  <div class="card card-client"><span class="n" id="stat-client">0</span>Probing clients</div>
+  <div class="card card-conn"><span class="n" id="stat-conn">0</span>Connected clients</div>
+  <div class="card card-ble"><span class="n" id="stat-ble">0</span>BLE devices</div>
 </section>
 
 <section>
@@ -213,6 +234,16 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <input type="search" data-filter-for="client-table" placeholder="Filter by MAC or SSID...">
 <table id="client-table">
 <thead><tr><th data-numeric="0">Client MAC</th><th data-numeric="0">SSIDs Probed</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
+<section>
+<h2>Connected Clients</h2>
+<p class="muted">Devices actively associated with an access point (from 802.11 data frames), not just probing for one.</p>
+<input type="search" data-filter-for="conn-table" placeholder="Filter by BSSID, SSID, client MAC, vendor...">
+<table id="conn-table">
+<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -264,6 +295,15 @@ function buildClientRows(clients) {
   return entries.map(([mac, info]) => {
     const ssids = (info.ssids_probed && info.ssids_probed.length) ? info.ssids_probed.join(", ") : "(broadcast)";
     return `<tr><td>${esc(mac)}</td><td>${esc(ssids)}</td><td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
+  }).join("");
+}
+
+function buildConnRows(connections) {
+  if (!connections.length) return emptyRow(6, "No connected clients captured yet.");
+  return connections.map(conn => {
+    const ssids = (conn.ssids && conn.ssids.length) ? conn.ssids.join(", ") : "(unknown)";
+    return `<tr><td>${esc(conn.bssid)}</td><td>${esc(ssids)}</td><td>${esc(conn.client_mac)}</td>` +
+           `<td>${esc(conn.vendor || "?")}</td><td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td></tr>`;
   }).join("");
 }
 
@@ -329,15 +369,17 @@ function render(data) {
   document.getElementById("stat-total").textContent = data.total_records;
   document.getElementById("stat-ap").textContent = Object.keys(data.access_points).length;
   document.getElementById("stat-client").textContent = Object.keys(data.wifi_clients).length;
+  document.getElementById("stat-conn").textContent = (data.connected_clients || []).length;
   document.getElementById("stat-ble").textContent = Object.keys(data.ble_devices).length;
   document.getElementById("meta").textContent =
     `Range: ${data.first_seen || "n/a"} → ${data.last_seen || "n/a"} · Updated ${new Date().toLocaleTimeString()}`;
 
   document.querySelector("#ap-table tbody").innerHTML = buildApRows(data.access_points);
   document.querySelector("#client-table tbody").innerHTML = buildClientRows(data.wifi_clients);
+  document.querySelector("#conn-table tbody").innerHTML = buildConnRows(data.connected_clients || []);
   document.querySelector("#ble-table tbody").innerHTML = buildBleRows(data.ble_devices);
 
-  ["ap-table", "client-table", "ble-table"].forEach(id => { reapplySort(id); applyFilter(id); });
+  ["ap-table", "client-table", "conn-table", "ble-table"].forEach(id => { reapplySort(id); applyFilter(id); });
 }
 
 async function poll() {
@@ -384,6 +426,34 @@ function bleLine(rec) {
   return `<span class="feed-ts">${ts}</span> <b>BLE</b> addr=${esc(rec.address)} name=${esc(rec.name || "?")} vendor=${esc(rec.vendor || "?")} rssi=${esc(rec.rssi ?? "?")}`;
 }
 
+let soundEnabled = false;
+let audioCtx = null;
+let lastBeepAt = 0;
+const BEEP_FREQ = { beacon: 880, probe_req: 660, probe_resp: 740, data: 520, ble: 1300 };
+
+function beep(kind) {
+  if (!soundEnabled || !audioCtx) return;
+  const now = performance.now();
+  if (now - lastBeepAt < 120) return; // throttle so a burst of frames isn't a solid tone
+  lastBeepAt = now;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = BEEP_FREQ[kind] || 600;
+  gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.09);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.1);
+}
+
+const soundToggle = document.getElementById("sound-toggle");
+soundToggle.addEventListener("click", () => {
+  soundEnabled = !soundEnabled;
+  if (soundEnabled && !audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  soundToggle.textContent = soundEnabled ? "🔊 Sound: On" : "🔇 Sound: Off";
+});
+
 function appendFeedLine(panelId, html, cls) {
   const panel = document.getElementById(panelId);
   const empty = panel.querySelector(".feed-empty");
@@ -404,9 +474,12 @@ async function pollEvents() {
     const data = await res.json();
     for (const rec of data.events) {
       if ("frame_type" in rec) {
-        appendFeedLine("feed-wifi", wifiLine(rec), "ft-" + (rec.frame_type || "data"));
+        const ft = rec.frame_type || "data";
+        appendFeedLine("feed-wifi", wifiLine(rec), "ft-" + ft);
+        beep(ft);
       } else if ("address" in rec) {
         appendFeedLine("feed-ble", bleLine(rec), "ft-ble");
+        beep("ble");
       }
     }
     eventsSince = data.total;

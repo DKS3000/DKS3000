@@ -69,7 +69,7 @@ def test_render_html_includes_data_and_is_self_contained():
     html = render_html(summary, "session.jsonl")
 
     assert html.startswith("<!doctype html>")
-    assert "<title>RF Recon Session Report</title>" in html
+    assert "<title>Mr D Sniffer - Session Report</title>" in html
     assert "AA:BB:CC:DD:EE:FF" in html
     assert "HomeNet" in html
     assert "11:22:33:44:55:66" in html
