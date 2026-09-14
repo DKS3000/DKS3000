@@ -40,7 +40,7 @@ BASENAME="$(basename "$LOGFILE")"
 BASENAME="${BASENAME%.*}"
 
 echo "Building dashboard from $LOGFILE ..."
-"$PYCMD" -m rf_sniffer report --log "$LOGFILE" \
+"$PYCMD" -m mr_d_sniffer report --log "$LOGFILE" \
     --out "reports/${BASENAME}.md" --html "reports/${BASENAME}.html" --open
 
 echo "Done. Dashboard: reports/${BASENAME}.html"

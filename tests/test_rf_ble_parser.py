@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from rf_sniffer.ble_sniffer import parse_advertisement
+from mr_d_sniffer.ble_sniffer import parse_advertisement
 
 
 def _device(address="66:55:44:33:22:11", name=None):

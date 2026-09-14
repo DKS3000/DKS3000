@@ -1,4 +1,4 @@
-from rf_sniffer.report import render_html, render_markdown, summarize
+from mr_d_sniffer.report import render_html, render_markdown, summarize
 
 
 def test_summarize_wifi_and_ble():

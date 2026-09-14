@@ -2,10 +2,10 @@
 # Required only for `instagram_analyzer fetch` (live Graph API mode):
 requests>=2.31
 
-# Required only for rf_sniffer's `wifi`/`both` commands (raw 802.11 capture):
+# Required only for mr_d_sniffer's `wifi`/`both` commands (raw 802.11 capture):
 scapy>=2.5
 
-# Required only for rf_sniffer's `ble`/`both` commands (BLE scanning):
+# Required only for mr_d_sniffer's `ble`/`both` commands (BLE scanning):
 bleak>=0.21
 
 # Required only for running the test suite:

@@ -1,5 +1,5 @@
-from rf_sniffer.logger import SessionLogger, export_csv, read_jsonl
-from rf_sniffer.models import BleObservation, WifiObservation
+from mr_d_sniffer.logger import SessionLogger, export_csv, read_jsonl
+from mr_d_sniffer.models import BleObservation, WifiObservation
 
 
 def test_write_and_read_round_trip(tmp_path):

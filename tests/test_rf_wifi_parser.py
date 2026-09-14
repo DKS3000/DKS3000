@@ -4,7 +4,7 @@ scapy = pytest.importorskip("scapy.all")
 
 from scapy.layers.dot11 import Dot11, Dot11Beacon, Dot11Elt, Dot11ProbeReq, RadioTap
 
-from rf_sniffer.wifi_sniffer import classify_encryption, extract_channel, extract_ssid, parse_packet
+from mr_d_sniffer.wifi_sniffer import classify_encryption, extract_channel, extract_ssid, parse_packet
 
 
 def _beacon(ssid="TestNet", channel=6, rsn=False, privacy=False, rssi=-42):

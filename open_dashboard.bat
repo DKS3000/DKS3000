@@ -50,7 +50,7 @@ for %%F in ("%LOGFILE%") do set "BASENAME=%%~nF"
 
 echo.
 echo Building dashboard from %LOGFILE% ...
-%PYCMD% -m rf_sniffer report --log "%LOGFILE%" --out "reports\%BASENAME%.md" --html "reports\%BASENAME%.html" --open
+%PYCMD% -m mr_d_sniffer report --log "%LOGFILE%" --out "reports\%BASENAME%.md" --html "reports\%BASENAME%.html" --open
 
 if errorlevel 1 (
     echo.

@@ -71,7 +71,7 @@ the test suite, in the same folder layout Instagram produces.
 
 ---
 
-# RF Recon Sniffer (WiFi + BLE)
+# Mr D Sniffer (WiFi + BLE Recon)
 
 A passive WiFi (802.11) and Bluetooth Low Energy reconnaissance tool for
 a Raspberry Pi (or any Linux box), with detailed structured logging.
@@ -124,21 +124,21 @@ grant the interpreter capabilities depending on your BlueZ policy.
 
 ```bash
 # WiFi only, hopping channels 1-11, for 5 minutes
-sudo python -m rf_sniffer wifi --iface wlan1mon --duration 300 --out logs/
+sudo python -m mr_d_sniffer wifi --iface wlan1mon --duration 300 --out logs/
 
 # BLE only, until Ctrl-C
-python -m rf_sniffer ble --out logs/
+python -m mr_d_sniffer ble --out logs/
 
 # Both at once, one combined log
-sudo python -m rf_sniffer both --iface wlan1mon --duration 300 --out logs/
+sudo python -m mr_d_sniffer both --iface wlan1mon --duration 300 --out logs/
 
 # Turn a captured session into a readable report + open a dashboard
-python -m rf_sniffer report --log logs/combined_20260101T000000Z.jsonl \
+python -m mr_d_sniffer report --log logs/combined_20260101T000000Z.jsonl \
     --out reports/session.md --csv reports/session.csv \
     --html reports/session.html --open
 
 # Live-updating dashboard while a capture is still running (or after)
-python -m rf_sniffer live --log logs/combined_20260101T000000Z.jsonl --port 8000
+python -m mr_d_sniffer live --log logs/combined_20260101T000000Z.jsonl --port 8000
 ```
 
 Add `--report path/to/out.md` / `--html path/to/out.html` to
@@ -156,10 +156,10 @@ same file — point it at a log that's mid-capture in another terminal:
 
 ```bash
 # terminal 1: capturing
-python -m rf_sniffer ble --out logs/
+python -m mr_d_sniffer ble --out logs/
 
 # terminal 2: watch it live (pick the .jsonl path that terminal 1 printed)
-python -m rf_sniffer live --log logs/ble_20260101T000000Z.jsonl --port 8000 --open
+python -m mr_d_sniffer live --log logs/ble_20260101T000000Z.jsonl --port 8000 --open
 ```
 
 Then visit `http://localhost:8000/` (or `http://raspberrypi.local:8000/`

@@ -1,4 +1,4 @@
-from rf_sniffer.oui import lookup_ble_company, lookup_mac_vendor
+from mr_d_sniffer.oui import lookup_ble_company, lookup_mac_vendor
 
 
 def test_known_mac_prefix():
