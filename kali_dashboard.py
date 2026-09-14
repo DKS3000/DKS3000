@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Kali Dashboard - All-in-One Network Monitoring & Automation Tool
-================================================================
+Decosta Sniffer Box - All-in-One Network Monitoring & Automation Tool
+=======================================================================
 
 A comprehensive security/monitoring dashboard for Kali Linux offering:
 - Public IP monitoring (via ipify)
@@ -404,7 +404,7 @@ def export_json(out_path, limit=200):
 # ============================================================
 def print_banner():
     print("=" * 60)
-    print(f"  Kali Dashboard v{VERSION}")
+    print(f"  Decosta Sniffer Box v{VERSION}")
     print("  Network Monitoring & Automation Tool")
     print("=" * 60)
     print(f"  pyshark:   {'available' if PYSHARK_AVAILABLE else 'NOT installed'}")
@@ -501,7 +501,7 @@ def run_quick_all():
 # ============================================================
 def main():
     parser = argparse.ArgumentParser(
-        description="Kali Dashboard - All-in-One Network Monitoring & Automation Tool"
+        description="Decosta Sniffer Box - All-in-One Network Monitoring & Automation Tool"
     )
     parser.add_argument("--quick", action="store_true",
                          help="Run all available tools once with default settings and exit.")

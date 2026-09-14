@@ -168,7 +168,7 @@ optional CSV export for further analysis in a spreadsheet or notebook.
 
 ---
 
-# Kali Dashboard
+# Decosta Sniffer Box
 
 A single-file, menu-driven dashboard for common Kali Linux monitoring
 tasks, useful for keeping an eye on your own network and devices:
