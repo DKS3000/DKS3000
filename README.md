@@ -240,3 +240,41 @@ Each JSONL line is one observation. WiFi records include
 turns a log into a markdown table per access point / probing client /
 BLE device (packet counts, strongest RSSI seen, first/last seen), plus
 optional CSV export for further analysis in a spreadsheet or notebook.
+
+---
+
+# Decosta Sniffer Box
+
+A single-file, menu-driven dashboard for common Kali Linux monitoring
+tasks, useful for keeping an eye on your own network and devices:
+
+- Public IP monitoring (via ipify), with change detection
+- Live packet capture on a local interface, or reading an existing
+  `.pcap`/`.pcapng` file (PyShark/tshark)
+- Headless UI automation smoke tests (Selenium)
+- SSH log retrieval from your own router/device (Paramiko)
+- All events persisted to a local SQLite database
+
+Every feature degrades gracefully and tells you what to install if a
+dependency (`pyshark`, `selenium`, `paramiko`) is missing, so the tool
+still runs with whatever you have available.
+
+## Setup
+
+```bash
+sudo apt update && sudo apt install -y python3-pip tshark chromium-driver
+pip3 install -r requirements.txt
+```
+
+## Usage
+
+```bash
+python3 kali_dashboard.py                # Interactive menu
+python3 kali_dashboard.py --quick        # Run all available tools once
+python3 kali_dashboard.py --ssh-host 192.168.1.1 --ssh-user admin --ssh-command "show log"
+```
+
+Live packet capture and SSH access require appropriate privileges/
+credentials for the interface or device you're targeting — only use
+these against networks and devices you own or are authorized to test.
+Logs and IP-change history are written to `~/kali_dashboard/monitor.db`.
