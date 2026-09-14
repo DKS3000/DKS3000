@@ -359,6 +359,47 @@ def fetch_ssh_logs(host=None, username=None, password=None, command=None):
 
 
 # ============================================================
+# EXPORT (for feeding the web dashboard artifact)
+# ============================================================
+def export_json(out_path, limit=200):
+    """Dump recent logs and IP changes to a JSON file for the web dashboard."""
+    import json
+
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute(
+        "SELECT id, timestamp, source_ip, action, activity FROM ip_logs "
+        "ORDER BY id DESC LIMIT ?", (limit,)
+    )
+    logs = [
+        {"id": row[0], "timestamp": row[1], "source_ip": row[2],
+         "action": row[3], "activity": row[4]}
+        for row in c.fetchall()
+    ]
+
+    c.execute(
+        "SELECT id, timestamp, old_ip, new_ip, reason FROM ip_changes "
+        "ORDER BY id DESC LIMIT ?", (limit,)
+    )
+    changes = [
+        {"id": row[0], "timestamp": row[1], "old_ip": row[2],
+         "new_ip": row[3], "reason": row[4]}
+        for row in c.fetchall()
+    ]
+    conn.close()
+
+    payload = {
+        "exported_at": datetime.datetime.now().isoformat(),
+        "logs": logs,
+        "changes": changes,
+    }
+    with open(out_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"[*] Exported {len(logs)} log(s) and {len(changes)} IP change(s) to {out_path}")
+
+
+# ============================================================
 # INTERACTIVE MENU
 # ============================================================
 def print_banner():
@@ -469,9 +510,16 @@ def main():
     parser.add_argument("--ssh-host", help="Router/device host for SSH log retrieval.")
     parser.add_argument("--ssh-user", help="SSH username for log retrieval.")
     parser.add_argument("--ssh-command", help="Command to run over SSH for log retrieval.")
+    parser.add_argument("--export-json", metavar="PATH",
+                         help="Export recent logs and IP changes to a JSON file and exit "
+                              "(for feeding the web dashboard).")
     args = parser.parse_args()
 
     ensure_db()
+
+    if args.export_json:
+        export_json(args.export_json)
+        return
 
     if args.ssh_host or args.ssh_user or args.ssh_command:
         fetch_ssh_logs(host=args.ssh_host, username=args.ssh_user, command=args.ssh_command)
