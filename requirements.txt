@@ -10,3 +10,8 @@ bleak>=0.21
 
 # Required only for running the test suite:
 pytest>=7.4
+
+# Required for kali_dashboard.py (all optional per-feature, see its docstring):
+pyshark>=0.6      # live/offline packet capture (needs tshark from apt)
+selenium>=4.0     # UI automation testing (needs chromium-driver from apt)
+paramiko>=3.0     # SSH router log retrieval
