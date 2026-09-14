@@ -250,14 +250,14 @@ _HTML_TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <title>Mr D Sniffer - Session Report</title>
 <style>
-  :root {{ color-scheme: light dark; }}
-  html {{ background: #fdf3ff; }}
-  @media (prefers-color-scheme: dark) {{ html {{ background: #1a1522; }} }}
+  :root {{ color-scheme: dark; }}
+  html {{ background: #14101c; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
          max-width: 1100px; margin: 0 auto; padding: 0 16px 24px; line-height: 1.5;
-         background: radial-gradient(circle at 15% 0%, rgba(106,61,245,.15), transparent 45%),
-                     radial-gradient(circle at 85% 15%, rgba(213,48,154,.14), transparent 45%),
-                     radial-gradient(circle at 50% 100%, rgba(255,122,61,.12), transparent 50%); }}
+         color: #e8e6ef;
+         background: radial-gradient(circle at 15% 0%, rgba(106,61,245,.28), transparent 45%),
+                     radial-gradient(circle at 85% 15%, rgba(213,48,154,.24), transparent 45%),
+                     radial-gradient(circle at 50% 100%, rgba(255,122,61,.18), transparent 50%); }}
   .banner {{
     margin: 0 -16px 20px; padding: 22px 16px 26px;
     background: linear-gradient(120deg, #6a3df5, #d5309a 45%, #ff7a3d 85%);
