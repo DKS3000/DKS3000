@@ -16,6 +16,9 @@ from typing import Optional
 from .report import _html_escape, summarize
 
 
+MAX_EVENT_BACKLOG = 500  # cap on how many past events /api/events will ever send in one response
+
+
 def _read_records_lenient(path: str) -> list[dict]:
     """Like logger.read_jsonl, but tolerates a partially-written final line
     (the capture process may be mid-append when we read)."""
@@ -99,6 +102,11 @@ def _make_handler(jsonl_path: str, interval: float, scan_state: Optional[dict]):
                 records = _read_records_lenient(jsonl_path)
             except FileNotFoundError:
                 records = []
+            # Safety cap: never send more than the most recent MAX_BACKLOG
+            # records in one response, even if a client's `since` is very
+            # stale (e.g. a tab left open across a huge capture) - avoids a
+            # multi-MB payload that can lock up the browser tab.
+            since = max(since, len(records) - MAX_EVENT_BACKLOG)
             new_records = records[since:] if since < len(records) else []
             payload = json.dumps({"events": new_records, "total": len(records)}).encode("utf-8")
             self._send(200, "application/json; charset=utf-8", payload)
@@ -437,6 +445,7 @@ function applyFilter(tableId) {
 }
 
 function render(data) {
+  if (eventsSince === null) eventsSince = data.total_records; // start the live feed from "now", not the whole backlog
   document.getElementById("stat-total").textContent = data.total_records;
   document.getElementById("stat-ap").textContent = Object.keys(data.access_points).length;
   document.getElementById("stat-client").textContent = Object.keys(data.wifi_clients).length;
@@ -501,7 +510,7 @@ async function poll() {
 }
 
 const MAX_FEED_LINES = 300;
-let eventsSince = 0;
+let eventsSince = null; // seeded from the first /api/summary response - see render()
 
 function timeOf(rec) {
   const raw = rec.timestamp;
@@ -609,6 +618,7 @@ function appendFeedLine(panelId, html, cls) {
 }
 
 async function pollEvents() {
+  if (eventsSince === null) return; // wait for the first /api/summary to seed the starting point
   try {
     const res = await fetch(`/api/events?since=${eventsSince}`, { cache: "no-store" });
     if (!res.ok) throw new Error(res.status);
