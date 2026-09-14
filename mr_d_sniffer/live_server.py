@@ -71,6 +71,8 @@ def _make_handler(jsonl_path: str, interval: float):
                 self._send(200, "text/html; charset=utf-8", html_body)
             elif self.path.startswith("/api/summary"):
                 self._serve_summary()
+            elif self.path.startswith("/api/events"):
+                self._serve_events()
             else:
                 self.send_error(404)
 
@@ -82,6 +84,18 @@ def _make_handler(jsonl_path: str, interval: float):
             except FileNotFoundError:
                 payload = json.dumps({"error": f"log not found: {jsonl_path}"}).encode("utf-8")
                 self._send(404, "application/json; charset=utf-8", payload)
+
+        def _serve_events(self):
+            from urllib.parse import parse_qs, urlsplit
+
+            since = int(parse_qs(urlsplit(self.path).query).get("since", ["0"])[0])
+            try:
+                records = _read_records_lenient(jsonl_path)
+            except FileNotFoundError:
+                records = []
+            new_records = records[since:] if since < len(records) else []
+            payload = json.dumps({"events": new_records, "total": len(records)}).encode("utf-8")
+            self._send(200, "application/json; charset=utf-8", payload)
 
         def _send(self, status: int, content_type: str, body: bytes):
             self.send_response(status)
@@ -142,6 +156,25 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
                           background: transparent; color: inherit; width: 100%; max-width: 320px; margin-bottom: 8px; }
   section { margin-bottom: 36px; }
   .empty td { opacity: .6; font-style: italic; }
+
+  .feed-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .feed-wrap { grid-template-columns: 1fr; } }
+  .feed-panel {
+    background: #0d1117; border-radius: 10px; padding: 10px 12px;
+    height: 320px; overflow-y: auto; font-family: "SF Mono", Consolas, "Courier New", monospace;
+    font-size: 12.5px; line-height: 1.55;
+  }
+  .feed-panel h3 { margin: 0 0 8px; font-family: -apple-system, sans-serif; font-size: 13px;
+                    color: #8b949e; text-transform: uppercase; letter-spacing: .04em; }
+  .feed-line { white-space: pre-wrap; word-break: break-all; animation: feedIn .25s ease-out; padding: 1px 0; }
+  @keyframes feedIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+  .feed-ts { color: #6e7681; }
+  .ft-beacon { color: #58a6ff; }
+  .ft-probe_req { color: #ffa657; }
+  .ft-probe_resp { color: #d2a8ff; }
+  .ft-data { color: #8b949e; }
+  .ft-ble { color: #7ee787; }
+  .feed-empty { color: #6e7681; font-style: italic; }
 </style>
 </head>
 <body>
@@ -153,6 +186,14 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
   <div class="card"><span class="n" id="stat-ap">0</span>Access points</div>
   <div class="card"><span class="n" id="stat-client">0</span>Probing clients</div>
   <div class="card"><span class="n" id="stat-ble">0</span>BLE devices</div>
+</section>
+
+<section>
+<h2>Live Event Feed</h2>
+<div class="feed-wrap">
+  <div class="feed-panel" id="feed-wifi"><div class="feed-empty">Waiting for WiFi frames...</div></div>
+  <div class="feed-panel" id="feed-ble"><div class="feed-empty">Waiting for BLE advertisements...</div></div>
+</div>
 </section>
 
 <section>
@@ -313,8 +354,71 @@ async function poll() {
   }
 }
 
+const MAX_FEED_LINES = 300;
+let eventsSince = 0;
+
+function timeOf(rec) {
+  const raw = rec.timestamp;
+  if (!raw) return "--:--:--";
+  const d = new Date(raw);
+  return isNaN(d) ? "--:--:--" : d.toLocaleTimeString([], { hour12: false });
+}
+
+function wifiLine(rec) {
+  const ts = timeOf(rec);
+  const ft = rec.frame_type || "?";
+  if (ft === "beacon") {
+    return `<span class="feed-ts">${ts}</span> <b>BEACON</b>     ssid=${esc(rec.ssid || "(hidden)")} bssid=${esc(rec.bssid)} ch=${esc(rec.channel ?? "?")} rssi=${esc(rec.rssi ?? "?")} enc=${esc(rec.encryption || "?")}`;
+  }
+  if (ft === "probe_req") {
+    return `<span class="feed-ts">${ts}</span> <b>PROBE_REQ</b>  client=${esc(rec.client_mac)} ssid=${esc(rec.ssid || "(broadcast)")} rssi=${esc(rec.rssi ?? "?")}`;
+  }
+  if (ft === "probe_resp") {
+    return `<span class="feed-ts">${ts}</span> <b>PROBE_RESP</b> bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)} ssid=${esc(rec.ssid || "?")} rssi=${esc(rec.rssi ?? "?")}`;
+  }
+  return `<span class="feed-ts">${ts}</span> <b>DATA</b>       bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)} rssi=${esc(rec.rssi ?? "?")}`;
+}
+
+function bleLine(rec) {
+  const ts = timeOf(rec);
+  return `<span class="feed-ts">${ts}</span> <b>BLE</b> addr=${esc(rec.address)} name=${esc(rec.name || "?")} vendor=${esc(rec.vendor || "?")} rssi=${esc(rec.rssi ?? "?")}`;
+}
+
+function appendFeedLine(panelId, html, cls) {
+  const panel = document.getElementById(panelId);
+  const empty = panel.querySelector(".feed-empty");
+  if (empty) empty.remove();
+  const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 20;
+  const line = document.createElement("div");
+  line.className = "feed-line " + cls;
+  line.innerHTML = html;
+  panel.appendChild(line);
+  while (panel.children.length > MAX_FEED_LINES) panel.removeChild(panel.firstChild);
+  if (atBottom) panel.scrollTop = panel.scrollHeight;
+}
+
+async function pollEvents() {
+  try {
+    const res = await fetch(`/api/events?since=${eventsSince}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    for (const rec of data.events) {
+      if ("frame_type" in rec) {
+        appendFeedLine("feed-wifi", wifiLine(rec), "ft-" + (rec.frame_type || "data"));
+      } else if ("address" in rec) {
+        appendFeedLine("feed-ble", bleLine(rec), "ft-ble");
+      }
+    }
+    eventsSince = data.total;
+  } catch (e) {
+    // feed polling failures are non-fatal; the status badge from poll() covers connectivity
+  }
+}
+
 poll();
+pollEvents();
 setInterval(poll, POLL_MS);
+setInterval(pollEvents, 1000);
 </script>
 </body>
 </html>
