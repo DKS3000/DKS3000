@@ -158,9 +158,29 @@ device. To open it:
   locally — or serve the folder and browse to it from another device
   on the network: `python -m http.server 8000 --directory reports`
   then visit `http://raspberrypi.local:8000/session.html`.
+- **Windows**, use `open_dashboard.bat` (repo root) — see below.
 
 Click any column header to sort a table; the search box above each
 table filters its rows live (e.g. type a vendor name or partial MAC).
+
+## Windows: one-click dashboard
+
+Copy a captured `.jsonl` session log from the Pi to a Windows machine
+(e.g. `scp pi@raspberrypi.local:~/logs/combined_....jsonl .`, or a USB
+drive), then either:
+
+- **Drag the `.jsonl` file onto `open_dashboard.bat`**, or
+- **Double-click `open_dashboard.bat`** and paste the log's path when
+  prompted.
+
+It builds `reports\<name>.md` and `reports\<name>.html` next to the
+script and opens the dashboard in your default browser. It only needs
+a plain Python install from [python.org](https://python.org) (check
+"Add python.exe to PATH" during setup) — the `report`/dashboard code
+path uses only the standard library, so nothing else needs installing
+on Windows. (Live WiFi/BLE *capture* still has to happen on the
+Pi/Linux side — `open_dashboard.bat` only builds and opens the
+dashboard from a log you already captured.)
 
 ## Extending range
 
