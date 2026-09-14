@@ -11,6 +11,7 @@ import os
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Optional
 
 from .report import _html_escape, summarize
 
@@ -56,11 +57,13 @@ def summary_to_json(summary: dict) -> dict:
     }
 
 
-def _make_handler(jsonl_path: str, interval: float):
+def _make_handler(jsonl_path: str, interval: float, scan_state: Optional[dict]):
     html_body = _LIVE_HTML_TEMPLATE.replace(
         "__INTERVAL_MS__", str(int(interval * 1000))
     ).replace(
         "__SOURCE__", _html_escape(os.path.basename(jsonl_path))
+    ).replace(
+        "__SCAN_ENABLED__", "true" if scan_state is not None else "false"
     ).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
@@ -74,6 +77,8 @@ def _make_handler(jsonl_path: str, interval: float):
                 self._serve_summary()
             elif self.path.startswith("/api/events"):
                 self._serve_events()
+            elif self.path.startswith("/api/scan"):
+                self._serve_scan()
             else:
                 self.send_error(404)
 
@@ -98,6 +103,14 @@ def _make_handler(jsonl_path: str, interval: float):
             payload = json.dumps({"events": new_records, "total": len(records)}).encode("utf-8")
             self._send(200, "application/json; charset=utf-8", payload)
 
+        def _serve_scan(self):
+            if scan_state is None:
+                payload = json.dumps({"enabled": False, "results": {}}).encode("utf-8")
+            else:
+                with scan_state["lock"]:
+                    payload = json.dumps({"enabled": True, "results": scan_state["results"]}).encode("utf-8")
+            self._send(200, "application/json; charset=utf-8", payload)
+
         def _send(self, status: int, content_type: str, body: bytes):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
@@ -109,8 +122,35 @@ def _make_handler(jsonl_path: str, interval: float):
     return Handler
 
 
-def run_live_server(jsonl_path: str, port: int, interval: float = 2.0, open_browser: bool = False) -> None:
-    handler = _make_handler(jsonl_path, interval)
+def _scan_loop(jsonl_path: str, scan_state: dict, interval: float = 20.0) -> None:
+    from .portscan import scan_many
+
+    while not scan_state["stop"].is_set():
+        try:
+            records = _read_records_lenient(jsonl_path)
+            summary = summarize(records)
+            ips = sorted({c["ip_address"] for c in summary.get("connected_clients", []) if c.get("ip_address")})
+            if ips:
+                results = scan_many(ips)
+                with scan_state["lock"]:
+                    scan_state["results"].update(results)
+        except FileNotFoundError:
+            pass
+        scan_state["stop"].wait(interval)
+
+
+def run_live_server(jsonl_path: str, port: int, interval: float = 2.0, open_browser: bool = False,
+                     scan_ports: bool = False) -> None:
+    scan_state = None
+    scan_thread = None
+    if scan_ports:
+        scan_state = {"lock": threading.Lock(), "results": {}, "stop": threading.Event()}
+        scan_thread = threading.Thread(target=_scan_loop, args=(jsonl_path, scan_state), daemon=True)
+        scan_thread.start()
+        print("[live] active port scanning ENABLED for devices with a known IP - "
+              "only use against devices you own or are authorized to test")
+
+    handler = _make_handler(jsonl_path, interval, scan_state)
     server = ThreadingHTTPServer(("0.0.0.0", port), handler)
     url = f"http://localhost:{port}/"
     print(f"[live] serving {jsonl_path}")
@@ -124,6 +164,8 @@ def run_live_server(jsonl_path: str, port: int, interval: float = 2.0, open_brow
         print("\n[live] stopped.")
     finally:
         server.server_close()
+        if scan_state is not None:
+            scan_state["stop"].set()
 
 
 _LIVE_HTML_TEMPLATE = """<!doctype html>
@@ -165,7 +207,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
   .card-client { background: linear-gradient(135deg, #ffa657, #e8722c); }
   .card-conn { background: linear-gradient(135deg, #d2a8ff, #9b5de5); }
   .card-ble { background: linear-gradient(135deg, #7ee787, #2f9e44); }
-  table { border-collapse: collapse; width: 100%; margin: 8px 0 28px; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 28px; display: block; overflow-x: auto; }
   th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }
   th { cursor: pointer; user-select: none; white-space: nowrap; }
   th:hover { opacity: .7; }
@@ -256,6 +298,16 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 </table>
 </section>
 
+<section id="scan-section">
+<h2>Open Services (Active Scan) <span class="muted" style="font-size:.6em;">- transmits to each device, unlike everything else here</span></h2>
+<p class="muted" id="scan-status">Checking scan status...</p>
+<input type="search" data-filter-for="scan-table" placeholder="Filter by IP or service...">
+<table id="scan-table">
+<thead><tr><th data-numeric="0">IP Address</th><th data-numeric="0">Open Ports / Services</th><th data-numeric="0">Last Scanned</th></tr></thead>
+<tbody></tbody>
+</table>
+</section>
+
 <section>
 <h2>BLE Devices</h2>
 <input type="search" data-filter-for="ble-table" placeholder="Filter by address, name, vendor...">
@@ -267,6 +319,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 
 <script>
 const POLL_MS = __INTERVAL_MS__;
+const SCAN_ENABLED = __SCAN_ENABLED__;
 const sortState = {};
 const filterState = {};
 
@@ -284,8 +337,12 @@ function emptyRow(colspan, msg) {
   return `<tr class="empty"><td colspan="${colspan}">${msg}</td></tr>`;
 }
 
+function fmtTs(ts) {
+  return ts ? String(ts).replace("T", " ").slice(0, 19) : "?";
+}
+
 function seenCells(info) {
-  return `<td>${esc(info.first_seen || "?")}</td><td>${esc(info.last_seen || "?")}</td>`;
+  return `<td>${esc(fmtTs(info.first_seen))}</td><td>${esc(fmtTs(info.last_seen))}</td>`;
 }
 
 function buildApRows(aps) {
@@ -386,7 +443,7 @@ function render(data) {
   document.getElementById("stat-conn").textContent = (data.connected_clients || []).length;
   document.getElementById("stat-ble").textContent = Object.keys(data.ble_devices).length;
   document.getElementById("meta").textContent =
-    `Range: ${data.first_seen || "n/a"} → ${data.last_seen || "n/a"} · Updated ${new Date().toLocaleTimeString()}`;
+    `Range: ${fmtTs(data.first_seen)} → ${fmtTs(data.last_seen)} · Updated ${new Date().toLocaleTimeString()}`;
 
   document.querySelector("#ap-table tbody").innerHTML = buildApRows(data.access_points);
   document.querySelector("#client-table tbody").innerHTML = buildClientRows(data.wifi_clients);
@@ -394,6 +451,39 @@ function render(data) {
   document.querySelector("#ble-table tbody").innerHTML = buildBleRows(data.ble_devices);
 
   ["ap-table", "client-table", "conn-table", "ble-table"].forEach(id => { reapplySort(id); applyFilter(id); });
+}
+
+function buildScanRows(results) {
+  const entries = Object.entries(results);
+  if (!entries.length) return emptyRow(3, "No scan results yet - waiting for a connected client with a known IP.");
+  return entries.sort((a, b) => a[0].localeCompare(b[0])).map(([ip, info]) => {
+    const ports = (info.ports && info.ports.length)
+      ? info.ports.map(p => `${p.port}/${esc(p.service)}`).join(", ")
+      : "(none open)";
+    return `<tr><td>${esc(ip)}</td><td>${ports}</td><td>${esc(fmtTs(info.scanned_at))}</td></tr>`;
+  }).join("");
+}
+
+async function pollScan() {
+  const status = document.getElementById("scan-status");
+  if (!SCAN_ENABLED) {
+    status.textContent = "Disabled - restart this dashboard with --scan-ports to enable (only against devices you own/are authorized to test).";
+    document.querySelector("#scan-table tbody").innerHTML = emptyRow(3, "Active scanning is disabled.");
+    return;
+  }
+  try {
+    const res = await fetch("/api/scan", { cache: "no-store" });
+    const data = await res.json();
+    const count = Object.keys(data.results || {}).length;
+    status.textContent = count
+      ? `Scanning ${count} device(s) with a known IP every ~20s.`
+      : "Enabled - waiting for a connected client with a known IP to scan.";
+    document.querySelector("#scan-table tbody").innerHTML = buildScanRows(data.results || {});
+    reapplySort("scan-table");
+    applyFilter("scan-table");
+  } catch (e) {
+    status.textContent = "Could not reach scan status.";
+  }
 }
 
 async function poll() {
@@ -541,8 +631,10 @@ async function pollEvents() {
 
 poll();
 pollEvents();
+pollScan();
 setInterval(poll, POLL_MS);
 setInterval(pollEvents, 1000);
+setInterval(pollScan, 5000);
 </script>
 </body>
 </html>

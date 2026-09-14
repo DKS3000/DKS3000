@@ -7,6 +7,17 @@ from datetime import datetime, timezone
 from .logger import read_jsonl
 
 
+def _fmt_ts(ts) -> str:
+    """Trim a full ISO timestamp (with microseconds/timezone) to a compact,
+    table-friendly "YYYY-MM-DD HH:MM:SS" for display - the full-precision
+    value is still what's stored/returned in the JSON API, this is purely
+    a rendering concern so timestamp columns don't force tables wider than
+    the page."""
+    if not ts:
+        return "?"
+    return str(ts).replace("T", " ")[:19]
+
+
 def _is_wifi(rec: dict) -> bool:
     return "frame_type" in rec
 
@@ -146,8 +157,8 @@ def render_markdown(summary: dict, source_path: str) -> str:
             enc = ", ".join(sorted(info["encryption"])) or "?"
             vendor = info["vendor"] or "?"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
-            first_seen = info.get("first_seen") or "?"
-            last_seen = info.get("last_seen") or "?"
+            first_seen = _fmt_ts(info.get("first_seen"))
+            last_seen = _fmt_ts(info.get("last_seen"))
             lines.append(f"| {bssid} | {ssids} | {channels} | {enc} | {vendor} | {rssi} | {info['count']} | {first_seen} | {last_seen} |")
         lines.append("")
 
@@ -161,8 +172,8 @@ def render_markdown(summary: dict, source_path: str) -> str:
             name = info.get("name") or "?"
             ssids = ", ".join(sorted(info["ssids_probed"])) or "(broadcast)"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
-            first_seen = info.get("first_seen") or "?"
-            last_seen = info.get("last_seen") or "?"
+            first_seen = _fmt_ts(info.get("first_seen"))
+            last_seen = _fmt_ts(info.get("last_seen"))
             lines.append(f"| {mac} | {name} | {ssids} | {rssi} | {info['count']} | {first_seen} | {last_seen} |")
         lines.append("")
 
@@ -178,8 +189,8 @@ def render_markdown(summary: dict, source_path: str) -> str:
             ip_address = conn.get("ip_address") or "?"
             vendor = conn["vendor"] or "?"
             rssi = conn["best_rssi"] if conn["best_rssi"] is not None else "?"
-            first_seen = conn.get("first_seen") or "?"
-            last_seen = conn.get("last_seen") or "?"
+            first_seen = _fmt_ts(conn.get("first_seen"))
+            last_seen = _fmt_ts(conn.get("last_seen"))
             lines.append(f"| {conn['bssid']} | {ssids} | {conn['client_mac']} | {name} | {ip_address} | {vendor} | {rssi} | {conn['count']} | {first_seen} | {last_seen} |")
         lines.append("")
 
@@ -193,8 +204,8 @@ def render_markdown(summary: dict, source_path: str) -> str:
             name = info["name"] or "?"
             vendor = info["vendor"] or "?"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
-            first_seen = info.get("first_seen") or "?"
-            last_seen = info.get("last_seen") or "?"
+            first_seen = _fmt_ts(info.get("first_seen"))
+            last_seen = _fmt_ts(info.get("last_seen"))
             lines.append(f"| {addr} | {name} | {vendor} | {rssi} | {info['count']} | {first_seen} | {last_seen} |")
         lines.append("")
 
@@ -234,8 +245,8 @@ def _signal_cell(rssi) -> str:
 
 
 def _seen_cells(info: dict) -> str:
-    first_seen = _html_escape(info.get("first_seen") or "?")
-    last_seen = _html_escape(info.get("last_seen") or "?")
+    first_seen = _html_escape(_fmt_ts(info.get("first_seen")))
+    last_seen = _html_escape(_fmt_ts(info.get("last_seen")))
     return f"<td>{first_seen}</td><td>{last_seen}</td>"
 
 
@@ -323,7 +334,7 @@ _HTML_TEMPLATE = """<!doctype html>
   .card-client {{ background: linear-gradient(135deg, #ffa657, #e8722c); }}
   .card-conn {{ background: linear-gradient(135deg, #d2a8ff, #9b5de5); }}
   .card-ble {{ background: linear-gradient(135deg, #7ee787, #2f9e44); }}
-  table {{ border-collapse: collapse; width: 100%; margin: 8px 0 28px; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 8px 0 28px; display: block; overflow-x: auto; }}
   th, td {{ text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }}
   th {{ cursor: pointer; user-select: none; white-space: nowrap; }}
   th:hover {{ opacity: .7; }}
@@ -458,8 +469,8 @@ def render_html(summary: dict, source_path: str) -> str:
     return _HTML_TEMPLATE.format(
         source=_html_escape(os.path.basename(source_path)),
         generated=datetime.now(timezone.utc).isoformat(),
-        first_seen=_html_escape(summary["first_seen"] or "n/a"),
-        last_seen=_html_escape(summary["last_seen"] or "n/a"),
+        first_seen=_html_escape(_fmt_ts(summary["first_seen"])),
+        last_seen=_html_escape(_fmt_ts(summary["last_seen"])),
         total_records=summary["total_records"],
         ap_count=len(aps),
         client_count=len(clients),

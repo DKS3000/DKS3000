@@ -93,7 +93,8 @@ def _cmd_report(args: argparse.Namespace) -> int:
 def _cmd_live(args: argparse.Namespace) -> int:
     from .live_server import run_live_server
 
-    run_live_server(args.log, args.port, interval=args.interval, open_browser=args.open)
+    run_live_server(args.log, args.port, interval=args.interval, open_browser=args.open,
+                     scan_ports=args.scan_ports)
     return 0
 
 
@@ -186,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Seconds between dashboard refreshes (default: 2)")
     p_live.add_argument("--open", action="store_true",
                          help="Open the dashboard in a browser once the server starts")
+    p_live.add_argument("--scan-ports", action="store_true",
+                         help="ACTIVE: periodically TCP-scan a short list of common ports on every "
+                              "connected client with a known IP. Only use against devices you own or "
+                              "are explicitly authorized to test - unlike the rest of this tool, this "
+                              "transmits to the device rather than only listening.")
     p_live.set_defaults(func=_cmd_live)
 
     return parser
