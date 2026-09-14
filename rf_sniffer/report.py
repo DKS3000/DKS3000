@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from .logger import read_jsonl
+from .oui import is_randomized_mac
 
 
 def _is_wifi(rec: dict) -> bool:
@@ -62,6 +63,11 @@ def summarize(records: list[dict]) -> dict:
         if r.get("rssi") is not None:
             d["best_rssi"] = r["rssi"] if d["best_rssi"] is None else max(d["best_rssi"], r["rssi"])
 
+    for mac, info in clients.items():
+        info["randomized"] = is_randomized_mac(mac)
+    for addr, info in devices.items():
+        info["randomized"] = is_randomized_mac(addr)
+
     return {
         "total_records": len(records),
         "first_seen": timestamps[0] if timestamps else None,
@@ -103,28 +109,38 @@ def render_markdown(summary: dict, source_path: str) -> str:
     if clients:
         lines.append(f"## WiFi Probing Clients ({len(clients)} unique MACs)")
         lines.append("")
-        lines.append("| Client MAC | SSIDs Probed | Best RSSI | Frames |")
-        lines.append("|---|---|---|---|")
+        lines.append("| Client MAC | Randomized | SSIDs Probed | Best RSSI | Frames |")
+        lines.append("|---|---|---|---|---|")
         for mac, info in sorted(clients.items(), key=lambda kv: -kv[1]["count"]):
             ssids = ", ".join(sorted(info["ssids_probed"])) or "(broadcast)"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
-            lines.append(f"| {mac} | {ssids} | {rssi} | {info['count']} |")
+            randomized = _randomized_text(info["randomized"])
+            lines.append(f"| {mac} | {randomized} | {ssids} | {rssi} | {info['count']} |")
         lines.append("")
 
     devices = summary["ble_devices"]
     if devices:
         lines.append(f"## BLE Devices ({len(devices)} unique addresses)")
         lines.append("")
-        lines.append("| Address | Name | Vendor | Best RSSI | Advertisements |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| Address | Randomized | Name | Vendor | Best RSSI | Advertisements |")
+        lines.append("|---|---|---|---|---|---|")
         for addr, info in sorted(devices.items(), key=lambda kv: -kv[1]["count"]):
             name = info["name"] or "?"
             vendor = info["vendor"] or "?"
             rssi = info["best_rssi"] if info["best_rssi"] is not None else "?"
-            lines.append(f"| {addr} | {name} | {vendor} | {rssi} | {info['count']} |")
+            randomized = _randomized_text(info["randomized"])
+            lines.append(f"| {addr} | {randomized} | {name} | {vendor} | {rssi} | {info['count']} |")
         lines.append("")
 
     return "\n".join(lines)
+
+
+def _randomized_text(value) -> str:
+    if value is True:
+        return "yes"
+    if value is False:
+        return "no"
+    return "?"
 
 
 def write_report(jsonl_path: str, out_path: str) -> str:
@@ -174,12 +190,20 @@ def _ap_rows_html(aps: dict) -> str:
     return "".join(rows)
 
 
+def _randomized_cell(value) -> str:
+    if value is True:
+        return '<span class="rand-flag rand-yes">yes</span>'
+    if value is False:
+        return '<span class="rand-flag rand-no">no</span>'
+    return "?"
+
+
 def _client_rows_html(clients: dict) -> str:
     rows = []
     for mac, info in sorted(clients.items(), key=lambda kv: -kv[1]["count"]):
         ssids = _html_escape(", ".join(sorted(info["ssids_probed"])) or "(broadcast)")
         rows.append(
-            f"<tr><td>{_html_escape(mac)}</td><td>{ssids}</td>"
+            f"<tr><td>{_html_escape(mac)}</td><td>{_randomized_cell(info['randomized'])}</td><td>{ssids}</td>"
             f"<td>{_signal_cell(info['best_rssi'])}</td><td>{info['count']}</td></tr>"
         )
     return "".join(rows)
@@ -191,7 +215,8 @@ def _ble_rows_html(devices: dict) -> str:
         name = _html_escape(info["name"] or "?")
         vendor = _html_escape(info["vendor"] or "?")
         rows.append(
-            f"<tr><td>{_html_escape(addr)}</td><td>{name}</td><td>{vendor}</td>"
+            f"<tr><td>{_html_escape(addr)}</td><td>{_randomized_cell(info['randomized'])}</td>"
+            f"<td>{name}</td><td>{vendor}</td>"
             f"<td>{_signal_cell(info['best_rssi'])}</td><td>{info['count']}</td></tr>"
         )
     return "".join(rows)
@@ -220,6 +245,9 @@ _HTML_TEMPLATE = """<!doctype html>
   .sig-track {{ flex: 1; background: rgba(128,128,128,.2); border-radius: 4px; height: 10px; overflow: hidden; }}
   .sig-fill {{ background: #2f9e44; height: 100%; }}
   .sig span {{ font-size: .85em; opacity: .8; white-space: nowrap; }}
+  .rand-flag {{ font-size: .85em; padding: 2px 7px; border-radius: 999px; }}
+  .rand-yes {{ background: rgba(230, 119, 0, .18); color: #e67700; }}
+  .rand-no {{ opacity: .55; }}
   input[type="search"] {{ padding: 8px 10px; border-radius: 8px; border: 1px solid currentColor;
                           background: transparent; color: inherit; width: 100%; max-width: 320px; margin-bottom: 8px; }}
   section {{ margin-bottom: 36px; }}
@@ -318,12 +346,12 @@ def render_html(summary: dict, source_path: str) -> str:
         {6}, _ap_rows_html(aps), "No WiFi access points captured.",
     )
     client_table = _table(
-        "client-table", ["Client MAC", "SSIDs Probed", "Best RSSI", "Frames"],
-        {3}, _client_rows_html(clients), "No probing WiFi clients captured.",
+        "client-table", ["Client MAC", "Randomized", "SSIDs Probed", "Best RSSI", "Frames"],
+        {4}, _client_rows_html(clients), "No probing WiFi clients captured.",
     )
     ble_table = _table(
-        "ble-table", ["Address", "Name", "Vendor", "Best RSSI", "Advertisements"],
-        {4}, _ble_rows_html(devices), "No BLE devices captured.",
+        "ble-table", ["Address", "Randomized", "Name", "Vendor", "Best RSSI", "Advertisements"],
+        {5}, _ble_rows_html(devices), "No BLE devices captured.",
     )
 
     return _HTML_TEMPLATE.format(

@@ -65,3 +65,23 @@ def lookup_mac_vendor(mac: str) -> str | None:
 def lookup_ble_company(company_id: int) -> str | None:
     """Best-effort vendor name for a BLE company identifier, or None."""
     return _BLE_COMPANY_IDS.get(company_id)
+
+
+def is_randomized_mac(mac: str) -> bool | None:
+    """Whether `mac` has the locally-administered bit set.
+
+    Real vendor-assigned addresses have this bit (the second-least-
+    significant bit of the first octet) clear. Modern phones/OSes set it
+    when generating a private address (WiFi probe-request randomization,
+    BLE private addresses), so a set bit means the address isn't a stable
+    per-device identifier and any OUI vendor lookup on it is meaningless.
+    Returns None if `mac` isn't parseable.
+    """
+    if not mac or len(mac) < 2:
+        return None
+    first_octet = mac.upper().replace("-", ":").split(":", 1)[0]
+    try:
+        value = int(first_octet, 16)
+    except ValueError:
+        return None
+    return bool(value & 0x02)

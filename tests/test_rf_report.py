@@ -28,10 +28,23 @@ def test_summarize_wifi_and_ble():
     client = summary["wifi_clients"]["11:22:33:44:55:66"]
     assert client["count"] == 1
     assert "HomeNet" in client["ssids_probed"]
+    assert client["randomized"] is False  # 0x11 = 0001_0001, locally-administered bit clear
 
     dev = summary["ble_devices"]["66:55:44:33:22:11"]
     assert dev["name"] == "SensorTag"
     assert dev["vendor"] == "Apple"
+    assert dev["randomized"] is True  # 0x66 = 0110_0110, locally-administered bit set
+
+
+def test_summarize_flags_randomized_addresses():
+    records = [
+        {"timestamp": "2026-01-01T00:00:00Z", "frame_type": "probe_req", "client_mac": "02:11:22:33:44:55",
+         "ssid": None, "rssi": -60},
+        {"timestamp": "2026-01-01T00:00:01Z", "address": "BE:12:34:56:78:9A", "name": None, "rssi": -70},
+    ]
+    summary = summarize(records)
+    assert summary["wifi_clients"]["02:11:22:33:44:55"]["randomized"] is True
+    assert summary["ble_devices"]["BE:12:34:56:78:9A"]["randomized"] is True
 
 
 def test_render_markdown_includes_sections():
