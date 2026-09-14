@@ -231,6 +231,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <thead><tr>
 <th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Channel(s)</th>
 <th data-numeric="0">Encryption</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th>
+<th data-numeric="0">First Seen</th><th data-numeric="0">Last Seen</th>
 </tr></thead>
 <tbody></tbody>
 </table>
@@ -240,7 +241,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <h2>WiFi Probing Clients</h2>
 <input type="search" data-filter-for="client-table" placeholder="Filter by MAC or SSID...">
 <table id="client-table">
-<thead><tr><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">SSIDs Probed</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<thead><tr><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">SSIDs Probed</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th><th data-numeric="0">First Seen</th><th data-numeric="0">Last Seen</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -250,7 +251,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <p class="muted">Devices actively associated with an access point (from 802.11 data frames), not just probing for one.</p>
 <input type="search" data-filter-for="conn-table" placeholder="Filter by BSSID, SSID, client MAC, vendor...">
 <table id="conn-table">
-<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">IP Address</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">IP Address</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th><th data-numeric="0">First Seen</th><th data-numeric="0">Last Seen</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -259,7 +260,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <h2>BLE Devices</h2>
 <input type="search" data-filter-for="ble-table" placeholder="Filter by address, name, vendor...">
 <table id="ble-table">
-<thead><tr><th data-numeric="0">Address</th><th data-numeric="0">Name</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Advertisements</th></tr></thead>
+<thead><tr><th data-numeric="0">Address</th><th data-numeric="0">Name</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Advertisements</th><th data-numeric="0">First Seen</th><th data-numeric="0">Last Seen</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -283,45 +284,49 @@ function emptyRow(colspan, msg) {
   return `<tr class="empty"><td colspan="${colspan}">${msg}</td></tr>`;
 }
 
+function seenCells(info) {
+  return `<td>${esc(info.first_seen || "?")}</td><td>${esc(info.last_seen || "?")}</td>`;
+}
+
 function buildApRows(aps) {
   const entries = Object.entries(aps).sort((a, b) => b[1].count - a[1].count);
-  if (!entries.length) return emptyRow(7, "No WiFi access points captured yet.");
+  if (!entries.length) return emptyRow(9, "No WiFi access points captured yet.");
   return entries.map(([bssid, info]) => {
     const ssids = (info.ssids && info.ssids.length) ? info.ssids.join(", ") : "(hidden)";
     const channels = (info.channels || []).join(", ");
     const enc = (info.encryption && info.encryption.length) ? info.encryption.join(", ") : "?";
     return `<tr><td>${esc(bssid)}</td><td>${esc(ssids)}</td><td>${esc(channels)}</td>` +
            `<td>${esc(enc)}</td><td>${esc(info.vendor || "?")}</td>` +
-           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
+           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td>${seenCells(info)}</tr>`;
   }).join("");
 }
 
 function buildClientRows(clients) {
   const entries = Object.entries(clients).sort((a, b) => b[1].count - a[1].count);
-  if (!entries.length) return emptyRow(5, "No probing WiFi clients captured yet.");
+  if (!entries.length) return emptyRow(7, "No probing WiFi clients captured yet.");
   return entries.map(([mac, info]) => {
     const ssids = (info.ssids_probed && info.ssids_probed.length) ? info.ssids_probed.join(", ") : "(broadcast)";
     return `<tr><td>${esc(mac)}</td><td>${esc(info.name || "?")}</td><td>${esc(ssids)}</td>` +
-           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
+           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td>${seenCells(info)}</tr>`;
   }).join("");
 }
 
 function buildConnRows(connections) {
-  if (!connections.length) return emptyRow(8, "No connected clients captured yet.");
+  if (!connections.length) return emptyRow(10, "No connected clients captured yet.");
   return connections.map(conn => {
     const ssids = (conn.ssids && conn.ssids.length) ? conn.ssids.join(", ") : "(unknown)";
     return `<tr><td>${esc(conn.bssid)}</td><td>${esc(ssids)}</td><td>${esc(conn.client_mac)}</td>` +
            `<td>${esc(conn.name || "?")}</td><td>${esc(conn.ip_address || "?")}</td><td>${esc(conn.vendor || "?")}</td>` +
-           `<td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td></tr>`;
+           `<td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td>${seenCells(conn)}</tr>`;
   }).join("");
 }
 
 function buildBleRows(devices) {
   const entries = Object.entries(devices).sort((a, b) => b[1].count - a[1].count);
-  if (!entries.length) return emptyRow(5, "No BLE devices captured yet.");
+  if (!entries.length) return emptyRow(7, "No BLE devices captured yet.");
   return entries.map(([addr, info]) => {
     return `<tr><td>${esc(addr)}</td><td>${esc(info.name || "?")}</td><td>${esc(info.vendor || "?")}</td>` +
-           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
+           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td>${seenCells(info)}</tr>`;
   }).join("");
 }
 
