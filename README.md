@@ -68,3 +68,100 @@ pytest
 
 `tests/fixtures/sample_export/` contains a small hand-built export used by
 the test suite, in the same folder layout Instagram produces.
+
+---
+
+# RF Recon Sniffer (WiFi + BLE)
+
+A passive WiFi (802.11) and Bluetooth Low Energy reconnaissance tool for
+a Raspberry Pi (or any Linux box), with detailed structured logging.
+Built for **authorized security research** — pentest engagements, CTFs,
+and auditing your own networks/devices. It does not attack, associate
+with, or transmit anything at APs/devices; it only listens.
+
+**Only run this against networks and devices you own, or where you have
+explicit written authorization to test.** Passively capturing WiFi
+management frames and BLE advertisements from third parties without
+consent is illegal in many jurisdictions and against the Terms of
+Service of most networks.
+
+## What it captures
+
+- **WiFi** (needs a monitor-mode-capable adapter): beacon frames (SSID,
+  BSSID, channel, encryption type, RSSI), probe requests (which nearby
+  clients are looking for which SSIDs), probe responses, and data-frame
+  associations between clients and access points.
+- **BLE**: every advertisement seen — device address, name, RSSI,
+  manufacturer ID/vendor, TX power, and advertised service UUIDs.
+
+Every observation is timestamped and vendor-tagged (best-effort OUI /
+BLE company-ID lookup) and appended to a JSONL log as it's captured, so
+a session survives being interrupted.
+
+## Setup
+
+```bash
+pip install -r requirements.txt   # installs scapy + bleak
+```
+
+WiFi capture needs an interface already in monitor mode:
+
+```bash
+sudo ip link set wlan1 down
+sudo iw dev wlan1 set type monitor
+sudo ip link set wlan1 up
+```
+
+(A built-in Pi WiFi chip usually can't do monitor mode — use a USB
+adapter with a monitor-mode-capable chipset, e.g. one based on
+Atheros AR9271 or RTL8812AU.)
+
+BLE capture uses the Pi's onboard Bluetooth via BlueZ — no extra setup
+beyond `bleak` being installed, though you may need to run as root or
+grant the interpreter capabilities depending on your BlueZ policy.
+
+## Usage
+
+```bash
+# WiFi only, hopping channels 1-11, for 5 minutes
+sudo python -m rf_sniffer wifi --iface wlan1mon --duration 300 --out logs/
+
+# BLE only, until Ctrl-C
+python -m rf_sniffer ble --out logs/
+
+# Both at once, one combined log
+sudo python -m rf_sniffer both --iface wlan1mon --duration 300 --out logs/
+
+# Turn a captured session into a readable report
+python -m rf_sniffer report --log logs/combined_20260101T000000Z.jsonl \
+    --out reports/session.md --csv reports/session.csv
+```
+
+Add `--report path/to/out.md` to `wifi`/`ble`/`both` to generate the
+markdown report automatically when the capture finishes.
+
+## Extending range
+
+"Long range" here is a hardware property, not something software adds
+on its own — this tool maximizes what your hardware can hear, but the
+antenna and radio are what set the ceiling:
+
+- **WiFi**: use a high-gain adapter (e.g. Alfa AWUS036ACH/AWUS1900 with
+  a directional panel or Yagi antenna) instead of a stock USB dongle.
+  Channel hopping (`--channels`, on by default) widens *which* networks
+  you see across the whole band, not how far any one signal reaches.
+- **BLE**: a USB BLE dongle with an external antenna connector hears
+  much farther than the Pi's onboard chip; BLE's own range is inherently
+  shorter than WiFi's regardless of antenna.
+- Elevate the antenna and remove line-of-sight obstructions — this
+  matters more for real-world range than any software setting.
+
+## What gets logged
+
+Each JSONL line is one observation. WiFi records include
+`frame_type`, `bssid`, `client_mac`, `ssid`, `channel`, `rssi`,
+`encryption`, `vendor`. BLE records include `address`, `name`, `rssi`,
+`tx_power`, `manufacturer_ids`, `service_uuids`, `vendor`. `report`
+turns a log into a markdown table per access point / probing client /
+BLE device (packet counts, strongest RSSI seen, first/last seen), plus
+optional CSV export for further analysis in a spreadsheet or notebook.
