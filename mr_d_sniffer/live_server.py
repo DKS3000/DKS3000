@@ -179,15 +179,16 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
   section { margin-bottom: 36px; }
   .empty td { opacity: .6; font-style: italic; }
 
-  .feed-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 700px) { .feed-wrap { grid-template-columns: 1fr; } }
+  .feed-wrap { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .feed-wrap { grid-template-columns: 1fr; } }
   .feed-panel {
     background: #0d1117; border-radius: 10px; padding: 10px 12px;
-    height: 320px; overflow-y: auto; font-family: "SF Mono", Consolas, "Courier New", monospace;
+    font-family: "SF Mono", Consolas, "Courier New", monospace;
     font-size: 12.5px; line-height: 1.55;
   }
   .feed-panel h3 { margin: 0 0 8px; font-family: -apple-system, sans-serif; font-size: 13px;
                     color: #8b949e; text-transform: uppercase; letter-spacing: .04em; }
+  .feed-panel > div[id^="feed-"] { height: 300px; overflow-y: auto; }
   .feed-line { white-space: pre-wrap; word-break: break-all; animation: feedIn .25s ease-out; padding: 1px 0; }
   @keyframes feedIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
   .feed-ts { color: #6e7681; }
@@ -217,8 +218,9 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <section>
 <h2>Live Event Feed</h2>
 <div class="feed-wrap">
-  <div class="feed-panel" id="feed-wifi"><div class="feed-empty">Waiting for WiFi frames...</div></div>
-  <div class="feed-panel" id="feed-ble"><div class="feed-empty">Waiting for BLE advertisements...</div></div>
+  <div class="feed-panel"><h3>WiFi</h3><div id="feed-wifi"><div class="feed-empty">Waiting for beacons/probes...</div></div></div>
+  <div class="feed-panel"><h3>Connected Clients</h3><div id="feed-conn"><div class="feed-empty">Waiting for data frames...</div></div></div>
+  <div class="feed-panel"><h3>BLE</h3><div id="feed-ble"><div class="feed-empty">Waiting for BLE advertisements...</div></div></div>
 </div>
 </section>
 
@@ -515,7 +517,7 @@ async function pollEvents() {
     for (const rec of data.events) {
       if ("frame_type" in rec) {
         const ft = rec.frame_type || "data";
-        appendFeedLine("feed-wifi", wifiLine(rec), "ft-" + ft);
+        appendFeedLine(ft === "data" ? "feed-conn" : "feed-wifi", wifiLine(rec), "ft-" + ft);
         beep(ft);
       } else if ("address" in rec) {
         appendFeedLine("feed-ble", bleLine(rec), "ft-ble");
