@@ -4,18 +4,21 @@ Usage:
     python -m rf_sniffer wifi --iface wlan1mon --out logs/ --duration 300
     python -m rf_sniffer ble --out logs/ --duration 300
     python -m rf_sniffer both --iface wlan1mon --out logs/ --duration 300
-    python -m rf_sniffer report --log logs/wifi_20260101T000000Z.jsonl --out reports/session.md
+    python -m rf_sniffer report --log logs/wifi_20260101T000000Z.jsonl \\
+        --out reports/session.md --html reports/session.html --open
 
 Only run this against networks and devices you own or are explicitly
 authorized to test.
 """
 
 import argparse
+import os
 import sys
 import threading
+import webbrowser
 
 from .logger import SessionLogger, export_csv
-from .report import write_report
+from .report import write_html_report, write_report
 
 
 def _cmd_wifi(args: argparse.Namespace) -> int:
@@ -74,13 +77,32 @@ def _cmd_report(args: argparse.Namespace) -> int:
     if args.csv:
         csv_path = export_csv(args.log, args.csv)
         print(f"CSV export:     {csv_path}")
+    html_path = None
+    if args.html:
+        html_path = write_html_report(args.log, args.html)
+        print(f"HTML dashboard: {html_path}")
+    if args.open:
+        _open_dashboard(html_path)
     return 0
 
 
+def _open_dashboard(html_path) -> None:
+    if not html_path:
+        print("Error: --open needs --html to know which file to open.", file=sys.stderr)
+        return
+    webbrowser.open(f"file://{os.path.abspath(html_path)}")
+
+
 def _maybe_report(log_path: str, args: argparse.Namespace) -> None:
+    html_path = None
     if getattr(args, "report", None):
         out_path = write_report(log_path, args.report)
         print(f"Report written: {out_path}")
+    if getattr(args, "html", None):
+        html_path = write_html_report(log_path, args.html)
+        print(f"HTML dashboard: {html_path}")
+    if getattr(args, "open", False):
+        _open_dashboard(html_path)
 
 
 def _add_common_capture_args(parser: argparse.ArgumentParser) -> None:
@@ -89,6 +111,10 @@ def _add_common_capture_args(parser: argparse.ArgumentParser) -> None:
                          help="Seconds to capture; omit to run until Ctrl-C")
     parser.add_argument("--report", default=None,
                          help="Optional path to also write a markdown summary report when done")
+    parser.add_argument("--html", default=None,
+                         help="Optional path to also write an HTML dashboard when done")
+    parser.add_argument("--open", action="store_true",
+                         help="Open the HTML dashboard in a browser when done (needs --html)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -118,6 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--log", required=True, help="Path to a captured .jsonl session log")
     p_report.add_argument("--out", required=True, help="Path to write the markdown report")
     p_report.add_argument("--csv", default=None, help="Optional path to also export the log as CSV")
+    p_report.add_argument("--html", default=None,
+                           help="Optional path to also write an HTML dashboard (open it in a browser)")
+    p_report.add_argument("--open", action="store_true",
+                           help="Open the HTML dashboard in a browser when done (needs --html)")
     p_report.set_defaults(func=_cmd_report)
 
     return parser

@@ -132,13 +132,35 @@ python -m rf_sniffer ble --out logs/
 # Both at once, one combined log
 sudo python -m rf_sniffer both --iface wlan1mon --duration 300 --out logs/
 
-# Turn a captured session into a readable report
+# Turn a captured session into a readable report + open a dashboard
 python -m rf_sniffer report --log logs/combined_20260101T000000Z.jsonl \
-    --out reports/session.md --csv reports/session.csv
+    --out reports/session.md --csv reports/session.csv \
+    --html reports/session.html --open
 ```
 
-Add `--report path/to/out.md` to `wifi`/`ble`/`both` to generate the
-markdown report automatically when the capture finishes.
+Add `--report path/to/out.md` / `--html path/to/out.html` to
+`wifi`/`ble`/`both` to generate the report/dashboard automatically when
+the capture finishes, plus `--open` to launch the dashboard in a
+browser right away.
+
+## Opening the dashboard
+
+`--html` writes a single self-contained `.html` file (no server, no
+external assets, no network access needed) with summary cards, and a
+sortable/filterable table per access point, probing client, and BLE
+device. To open it:
+
+- **On the Pi with a desktop**, `--open` launches it in the default
+  browser automatically, or double-click the file / run
+  `xdg-open reports/session.html`.
+- **Headless Pi (SSH only)**, copy it to a machine that has a browser:
+  `scp pi@raspberrypi.local:~/reports/session.html .` then open it
+  locally — or serve the folder and browse to it from another device
+  on the network: `python -m http.server 8000 --directory reports`
+  then visit `http://raspberrypi.local:8000/session.html`.
+
+Click any column header to sort a table; the search box above each
+table filters its rows live (e.g. type a vendor name or partial MAC).
 
 ## Extending range
 

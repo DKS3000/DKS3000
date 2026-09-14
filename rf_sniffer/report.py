@@ -135,3 +135,217 @@ def write_report(jsonl_path: str, out_path: str) -> str:
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(markdown)
     return out_path
+
+
+def _rssi_pct(rssi) -> int:
+    """Map dBm (~-30 strong to ~-100 weak) to a 0-100% bar width."""
+    if rssi is None:
+        return 0
+    return max(0, min(100, round((rssi + 100) / 70 * 100)))
+
+
+def _html_escape(value) -> str:
+    text = "" if value is None else str(value)
+    return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _signal_cell(rssi) -> str:
+    if rssi is None:
+        return "?"
+    pct = _rssi_pct(rssi)
+    return (
+        f'<div class="sig"><div class="sig-track"><div class="sig-fill" style="width:{pct}%"></div></div>'
+        f"<span>{rssi} dBm</span></div>"
+    )
+
+
+def _ap_rows_html(aps: dict) -> str:
+    rows = []
+    for bssid, info in sorted(aps.items(), key=lambda kv: -kv[1]["count"]):
+        ssids = _html_escape(", ".join(sorted(info["ssids"])) or "(hidden)")
+        channels = _html_escape(", ".join(str(c) for c in sorted(info["channels"])))
+        enc = _html_escape(", ".join(sorted(info["encryption"])) or "?")
+        vendor = _html_escape(info["vendor"] or "?")
+        rows.append(
+            f"<tr><td>{_html_escape(bssid)}</td><td>{ssids}</td><td>{channels}</td>"
+            f"<td>{enc}</td><td>{vendor}</td><td>{_signal_cell(info['best_rssi'])}</td>"
+            f"<td>{info['count']}</td></tr>"
+        )
+    return "".join(rows)
+
+
+def _client_rows_html(clients: dict) -> str:
+    rows = []
+    for mac, info in sorted(clients.items(), key=lambda kv: -kv[1]["count"]):
+        ssids = _html_escape(", ".join(sorted(info["ssids_probed"])) or "(broadcast)")
+        rows.append(
+            f"<tr><td>{_html_escape(mac)}</td><td>{ssids}</td>"
+            f"<td>{_signal_cell(info['best_rssi'])}</td><td>{info['count']}</td></tr>"
+        )
+    return "".join(rows)
+
+
+def _ble_rows_html(devices: dict) -> str:
+    rows = []
+    for addr, info in sorted(devices.items(), key=lambda kv: -kv[1]["count"]):
+        name = _html_escape(info["name"] or "?")
+        vendor = _html_escape(info["vendor"] or "?")
+        rows.append(
+            f"<tr><td>{_html_escape(addr)}</td><td>{name}</td><td>{vendor}</td>"
+            f"<td>{_signal_cell(info['best_rssi'])}</td><td>{info['count']}</td></tr>"
+        )
+    return "".join(rows)
+
+
+_HTML_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RF Recon Session Report</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         max-width: 1100px; margin: 0 auto; padding: 24px 16px; line-height: 1.5; }}
+  h1 {{ margin-bottom: 4px; }}
+  .muted {{ opacity: .65; font-size: .9em; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0; }}
+  .card {{ border: 1px solid currentColor; border-radius: 10px; padding: 14px; opacity: .95; }}
+  .card .n {{ font-size: 1.6em; font-weight: 700; display: block; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 8px 0 28px; }}
+  th, td {{ text-align: left; padding: 6px 10px; border-bottom: 1px solid rgba(128,128,128,.3); }}
+  th {{ cursor: pointer; user-select: none; white-space: nowrap; }}
+  th:hover {{ opacity: .7; }}
+  th.sorted::after {{ content: " \\25BE"; }}
+  .sig {{ display: flex; align-items: center; gap: 8px; min-width: 140px; }}
+  .sig-track {{ flex: 1; background: rgba(128,128,128,.2); border-radius: 4px; height: 10px; overflow: hidden; }}
+  .sig-fill {{ background: #2f9e44; height: 100%; }}
+  .sig span {{ font-size: .85em; opacity: .8; white-space: nowrap; }}
+  input[type="search"] {{ padding: 8px 10px; border-radius: 8px; border: 1px solid currentColor;
+                          background: transparent; color: inherit; width: 100%; max-width: 320px; margin-bottom: 8px; }}
+  section {{ margin-bottom: 36px; }}
+  .empty {{ opacity: .6; font-style: italic; }}
+</style>
+</head>
+<body>
+<h1>RF Recon Session Report</h1>
+<p class="muted">Source: {source} &middot; Generated: {generated} &middot; Range: {first_seen} &rarr; {last_seen}</p>
+
+<section class="grid">
+  <div class="card"><span class="n">{total_records}</span>Total records</div>
+  <div class="card"><span class="n">{ap_count}</span>Access points</div>
+  <div class="card"><span class="n">{client_count}</span>Probing clients</div>
+  <div class="card"><span class="n">{ble_count}</span>BLE devices</div>
+</section>
+
+<section>
+<h2>WiFi Access Points</h2>
+<input type="search" data-filter-for="ap-table" placeholder="Filter by BSSID, SSID, vendor...">
+{ap_table}
+</section>
+
+<section>
+<h2>WiFi Probing Clients</h2>
+<input type="search" data-filter-for="client-table" placeholder="Filter by MAC or SSID...">
+{client_table}
+</section>
+
+<section>
+<h2>BLE Devices</h2>
+<input type="search" data-filter-for="ble-table" placeholder="Filter by address, name, vendor...">
+{ble_table}
+</section>
+
+<script>
+// Click-to-sort and live filtering; no external libraries, works offline.
+function sortTable(table, col, numeric) {{
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+  const dir = table.dataset.sortCol == col && table.dataset.sortDir == "asc" ? "desc" : "asc";
+  rows.sort((a, b) => {{
+    let x = a.cells[col].textContent.trim();
+    let y = b.cells[col].textContent.trim();
+    if (numeric) {{ x = parseFloat(x) || -9999; y = parseFloat(y) || -9999; }}
+    if (x < y) return dir === "asc" ? -1 : 1;
+    if (x > y) return dir === "asc" ? 1 : -1;
+    return 0;
+  }});
+  rows.forEach(r => tbody.appendChild(r));
+  table.dataset.sortCol = col;
+  table.dataset.sortDir = dir;
+  table.querySelectorAll("th").forEach(th => th.classList.remove("sorted"));
+  table.tHead.rows[0].cells[col].classList.add("sorted");
+}}
+
+document.querySelectorAll("table").forEach(table => {{
+  const headers = table.tHead ? table.tHead.rows[0].cells : [];
+  Array.from(headers).forEach((th, i) => {{
+    th.addEventListener("click", () => sortTable(table, i, th.dataset.numeric === "1"));
+  }});
+}});
+
+document.querySelectorAll("input[data-filter-for]").forEach(input => {{
+  const table = document.getElementById(input.dataset.filterFor);
+  if (!table) return;
+  input.addEventListener("input", () => {{
+    const q = input.value.toLowerCase();
+    Array.from(table.tBodies[0].rows).forEach(row => {{
+      row.style.display = row.textContent.toLowerCase().includes(q) ? "" : "none";
+    }});
+  }});
+}});
+</script>
+
+</body>
+</html>
+"""
+
+
+def render_html(summary: dict, source_path: str) -> str:
+    aps = summary["access_points"]
+    clients = summary["wifi_clients"]
+    devices = summary["ble_devices"]
+
+    def _table(table_id, headers, numeric_cols, rows_html, empty_msg):
+        if not rows_html:
+            return f'<p class="empty">{empty_msg}</p>'
+        ths = "".join(
+            f'<th data-numeric="{"1" if i in numeric_cols else "0"}">{h}</th>' for i, h in enumerate(headers)
+        )
+        return f'<table id="{table_id}"><thead><tr>{ths}</tr></thead><tbody>{rows_html}</tbody></table>'
+
+    ap_table = _table(
+        "ap-table", ["BSSID", "SSID(s)", "Channel(s)", "Encryption", "Vendor", "Best RSSI", "Frames"],
+        {6}, _ap_rows_html(aps), "No WiFi access points captured.",
+    )
+    client_table = _table(
+        "client-table", ["Client MAC", "SSIDs Probed", "Best RSSI", "Frames"],
+        {3}, _client_rows_html(clients), "No probing WiFi clients captured.",
+    )
+    ble_table = _table(
+        "ble-table", ["Address", "Name", "Vendor", "Best RSSI", "Advertisements"],
+        {4}, _ble_rows_html(devices), "No BLE devices captured.",
+    )
+
+    return _HTML_TEMPLATE.format(
+        source=_html_escape(os.path.basename(source_path)),
+        generated=datetime.now(timezone.utc).isoformat(),
+        first_seen=_html_escape(summary["first_seen"] or "n/a"),
+        last_seen=_html_escape(summary["last_seen"] or "n/a"),
+        total_records=summary["total_records"],
+        ap_count=len(aps),
+        client_count=len(clients),
+        ble_count=len(devices),
+        ap_table=ap_table,
+        client_table=client_table,
+        ble_table=ble_table,
+    )
+
+
+def write_html_report(jsonl_path: str, out_path: str) -> str:
+    records = list(read_jsonl(jsonl_path))
+    summary = summarize(records)
+    html = render_html(summary, jsonl_path)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as fh:
+        fh.write(html)
+    return out_path
