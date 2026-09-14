@@ -26,6 +26,8 @@ from .oui import lookup_mac_vendor
 DEFAULT_CHANNELS = list(range(1, 12))
 
 WPA_OUI_TYPE1 = b"\x00\x50\xf2\x01"  # Microsoft WPA vendor-specific element
+WPS_OUI_TYPE4 = b"\x00\x50\xf2\x04"  # Microsoft WPS vendor-specific element
+WPS_ATTR_DEVICE_NAME = 0x1011
 
 
 def classify_encryption(pkt) -> str:
@@ -64,6 +66,32 @@ def extract_ssid(pkt) -> Optional[str]:
         except Exception:
             return None
         return ssid if ssid else None
+    return None
+
+
+def extract_device_name(pkt) -> Optional[str]:
+    """Best-effort device name from a WPS "Device Name" attribute, sent by
+    many phones/IoT devices in probe requests (not guaranteed - plenty of
+    devices randomize their MAC and omit this)."""
+    from scapy.layers.dot11 import Dot11Elt
+
+    elt = pkt.getlayer(Dot11Elt)
+    while elt is not None:
+        if elt.ID == 221 and bytes(elt.info[:4]) == WPS_OUI_TYPE4:
+            data = bytes(elt.info[4:])
+            pos = 0
+            while pos + 4 <= len(data):
+                attr_type = int.from_bytes(data[pos:pos + 2], "big")
+                attr_len = int.from_bytes(data[pos + 2:pos + 4], "big")
+                value = data[pos + 4:pos + 4 + attr_len]
+                if attr_type == WPS_ATTR_DEVICE_NAME and value:
+                    try:
+                        name = value.decode("utf-8", errors="replace").strip()
+                    except Exception:
+                        return None
+                    return name or None
+                pos += 4 + attr_len
+        elt = elt.payload.getlayer(Dot11Elt)
     return None
 
 
@@ -122,6 +150,7 @@ def parse_packet(pkt) -> Optional[WifiObservation]:
             ssid=extract_ssid(pkt),
             rssi=extract_rssi(pkt),
             vendor=lookup_mac_vendor(dot11.addr2),
+            device_name=extract_device_name(pkt),
         )
 
     if dot11.type == 2:  # data frame -> confirms an active BSSID<->client link

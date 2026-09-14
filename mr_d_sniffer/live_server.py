@@ -240,7 +240,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <h2>WiFi Probing Clients</h2>
 <input type="search" data-filter-for="client-table" placeholder="Filter by MAC or SSID...">
 <table id="client-table">
-<thead><tr><th data-numeric="0">Client MAC</th><th data-numeric="0">SSIDs Probed</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<thead><tr><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">SSIDs Probed</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -250,7 +250,7 @@ _LIVE_HTML_TEMPLATE = """<!doctype html>
 <p class="muted">Devices actively associated with an access point (from 802.11 data frames), not just probing for one.</p>
 <input type="search" data-filter-for="conn-table" placeholder="Filter by BSSID, SSID, client MAC, vendor...">
 <table id="conn-table">
-<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
+<thead><tr><th data-numeric="0">BSSID</th><th data-numeric="0">SSID(s)</th><th data-numeric="0">Client MAC</th><th data-numeric="0">Name</th><th data-numeric="0">Vendor</th><th data-numeric="1">Best RSSI</th><th data-numeric="1">Frames</th></tr></thead>
 <tbody></tbody>
 </table>
 </section>
@@ -298,19 +298,21 @@ function buildApRows(aps) {
 
 function buildClientRows(clients) {
   const entries = Object.entries(clients).sort((a, b) => b[1].count - a[1].count);
-  if (!entries.length) return emptyRow(4, "No probing WiFi clients captured yet.");
+  if (!entries.length) return emptyRow(5, "No probing WiFi clients captured yet.");
   return entries.map(([mac, info]) => {
     const ssids = (info.ssids_probed && info.ssids_probed.length) ? info.ssids_probed.join(", ") : "(broadcast)";
-    return `<tr><td>${esc(mac)}</td><td>${esc(ssids)}</td><td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
+    return `<tr><td>${esc(mac)}</td><td>${esc(info.name || "?")}</td><td>${esc(ssids)}</td>` +
+           `<td>${sigCell(info.best_rssi)}</td><td>${info.count}</td></tr>`;
   }).join("");
 }
 
 function buildConnRows(connections) {
-  if (!connections.length) return emptyRow(6, "No connected clients captured yet.");
+  if (!connections.length) return emptyRow(7, "No connected clients captured yet.");
   return connections.map(conn => {
     const ssids = (conn.ssids && conn.ssids.length) ? conn.ssids.join(", ") : "(unknown)";
     return `<tr><td>${esc(conn.bssid)}</td><td>${esc(ssids)}</td><td>${esc(conn.client_mac)}</td>` +
-           `<td>${esc(conn.vendor || "?")}</td><td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td></tr>`;
+           `<td>${esc(conn.name || "?")}</td><td>${esc(conn.vendor || "?")}</td>` +
+           `<td>${sigCell(conn.best_rssi)}</td><td>${conn.count}</td></tr>`;
   }).join("");
 }
 
@@ -420,7 +422,8 @@ function wifiLine(rec) {
     return `<span class="feed-ts">${ts}</span> <b>BEACON</b>     ssid=${esc(rec.ssid || "(hidden)")} bssid=${esc(rec.bssid)} ch=${esc(rec.channel ?? "?")} rssi=${esc(rec.rssi ?? "?")} enc=${esc(rec.encryption || "?")}`;
   }
   if (ft === "probe_req") {
-    return `<span class="feed-ts">${ts}</span> <b>PROBE_REQ</b>  client=${esc(rec.client_mac)} ssid=${esc(rec.ssid || "(broadcast)")} rssi=${esc(rec.rssi ?? "?")}`;
+    const name = rec.device_name ? ` name=${esc(rec.device_name)}` : "";
+    return `<span class="feed-ts">${ts}</span> <b>PROBE_REQ</b>  client=${esc(rec.client_mac)}${name} ssid=${esc(rec.ssid || "(broadcast)")} rssi=${esc(rec.rssi ?? "?")}`;
   }
   if (ft === "probe_resp") {
     return `<span class="feed-ts">${ts}</span> <b>PROBE_RESP</b> bssid=${esc(rec.bssid)} client=${esc(rec.client_mac)} ssid=${esc(rec.ssid || "?")} rssi=${esc(rec.rssi ?? "?")}`;

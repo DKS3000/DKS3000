@@ -22,6 +22,7 @@ class WifiObservation:
     rssi: Optional[int] = None
     encryption: Optional[str] = None  # "OPEN" | "WEP" | "WPA" | "WPA2" | "WPA3"
     vendor: Optional[str] = None
+    device_name: Optional[str] = None  # from a WPS "Device Name" element, when a client advertises one
 
 
 @dataclass
