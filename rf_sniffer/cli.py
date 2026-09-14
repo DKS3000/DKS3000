@@ -27,6 +27,7 @@ def _cmd_wifi(args: argparse.Namespace) -> int:
     channels = [int(c) for c in args.channels.split(",")] if args.channels else DEFAULT_CHANNELS
     with SessionLogger(args.out, "wifi") as logger:
         print(f"[wifi] capturing on {args.iface} -> {logger.path}")
+        _maybe_start_live(logger.path, args)
         count = run_wifi_sniffer(args.iface, logger, duration=args.duration,
                                   channels=channels, hop=not args.no_hop)
     print(f"[wifi] logged {count} observations")
@@ -39,6 +40,7 @@ def _cmd_ble(args: argparse.Namespace) -> int:
 
     with SessionLogger(args.out, "ble") as logger:
         print(f"[ble] scanning -> {logger.path}")
+        _maybe_start_live(logger.path, args)
         count = run_ble_sniffer(logger, duration=args.duration)
     print(f"[ble] logged {count} observations")
     _maybe_report(logger.path, args)
@@ -52,6 +54,7 @@ def _cmd_both(args: argparse.Namespace) -> int:
     channels = [int(c) for c in args.channels.split(",")] if args.channels else DEFAULT_CHANNELS
     with SessionLogger(args.out, "combined") as logger:
         print(f"[both] WiFi on {args.iface} + BLE scan -> {logger.path}")
+        _maybe_start_live(logger.path, args)
 
         wifi_result = {}
 
@@ -100,6 +103,20 @@ def _open_dashboard(html_path) -> None:
     webbrowser.open(f"file://{os.path.abspath(html_path)}")
 
 
+def _maybe_start_live(logger_path: str, args: argparse.Namespace) -> None:
+    if not getattr(args, "live", False):
+        return
+    from .live_server import run_live_server
+
+    port = args.live_port
+    thread = threading.Thread(
+        target=run_live_server, args=(logger_path, port),
+        kwargs={"interval": 2.0, "open_browser": False}, daemon=True,
+    )
+    thread.start()
+    print(f"[live] dashboard at http://localhost:{port}/ (updates while this capture runs)")
+
+
 def _maybe_report(log_path: str, args: argparse.Namespace) -> None:
     html_path = None
     if getattr(args, "report", None):
@@ -122,6 +139,10 @@ def _add_common_capture_args(parser: argparse.ArgumentParser) -> None:
                          help="Optional path to also write an HTML dashboard when done")
     parser.add_argument("--open", action="store_true",
                          help="Open the HTML dashboard in a browser when done (needs --html)")
+    parser.add_argument("--live", action="store_true",
+                         help="Serve a live-updating dashboard on --live-port while this capture runs")
+    parser.add_argument("--live-port", type=int, default=8000,
+                         help="Port for the --live dashboard (default: 8000)")
 
 
 def build_parser() -> argparse.ArgumentParser:
