@@ -159,6 +159,7 @@ device. To open it:
   on the network: `python -m http.server 8000 --directory reports`
   then visit `http://raspberrypi.local:8000/session.html`.
 - **Windows**, use `open_dashboard.bat` (repo root) — see below.
+- **Linux/macOS**, use `open_dashboard.sh` (repo root) — see below.
 
 Click any column header to sort a table; the search box above each
 table filters its rows live (e.g. type a vendor name or partial MAC).
@@ -181,6 +182,24 @@ path uses only the standard library, so nothing else needs installing
 on Windows. (Live WiFi/BLE *capture* still has to happen on the
 Pi/Linux side — `open_dashboard.bat` only builds and opens the
 dashboard from a log you already captured.)
+
+## Linux/macOS: one-click dashboard
+
+Same idea as the Windows launcher, for a Linux desktop, macOS, or the
+Pi itself if it has a desktop environment:
+
+```bash
+./open_dashboard.sh path/to/session.jsonl
+# or, with no argument, it prompts for the path
+./open_dashboard.sh
+```
+
+It builds `reports/<name>.md` and `reports/<name>.html` next to the
+script and opens the dashboard with your default browser (falling
+back to printing instructions if no browser is available, e.g. over a
+headless SSH session — see the headless option above). Only needs
+Python 3 already on `PATH`; run `chmod +x open_dashboard.sh` once if
+it isn't already executable.
 
 ## Extending range
 
