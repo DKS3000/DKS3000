@@ -165,3 +165,16 @@ Each JSONL line is one observation. WiFi records include
 turns a log into a markdown table per access point / probing client /
 BLE device (packet counts, strongest RSSI seen, first/last seen), plus
 optional CSV export for further analysis in a spreadsheet or notebook.
+
+# DGFT VPN Access Tester
+
+`dgft_access_tester` runs plain HTTP(S) requests against dgft.gov.in only
+while a VPN is verified (tunnel up **and** public IP differs from the
+pre-VPN IP), records status, headers (cookies stripped), timing, redirects
+and classification, and exports CSV/JSON. No credential handling and no
+auth/CAPTCHA/WAF bypass. VPN control uses commands from your own config
+(see `dgft_access_tester/vpn.py`).
+
+```bash
+python -m dgft_access_tester --config vpn_config.json   # http://127.0.0.1:8765
+```
