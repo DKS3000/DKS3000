@@ -1,0 +1,5 @@
+# Python packages used by the dashboard
+
+# Tkinter is included with standard Python installs on Linux/macOS.
+# This file is kept for compatibility and future extension.
+

@@ -1,0 +1,38 @@
+{
+  "canada": {
+    "host": "geo.iproyal.com",
+    "port": 12321,
+    "username": "YOUR_IPROYAL_USERNAME_country-ca",
+    "password": "YOUR_IPROYAL_PASSWORD",
+    "proxy_type": "http",
+    "country_code": "CA",
+    "reader_id": "CANADA"
+  },
+  "uruguay": {
+    "host": "geo.iproyal.com",
+    "port": 12321,
+    "username": "YOUR_IPROYAL_USERNAME_country-uy",
+    "password": "YOUR_IPROYAL_PASSWORD",
+    "proxy_type": "http",
+    "country_code": "UY",
+    "reader_id": "URUGUAY"
+  },
+  "liberia": {
+    "host": "geo.iproyal.com",
+    "port": 12321,
+    "username": "YOUR_IPROYAL_USERNAME_country-lr",
+    "password": "YOUR_IPROYAL_PASSWORD",
+    "proxy_type": "http",
+    "country_code": "LR",
+    "reader_id": "LIBERIA"
+  },
+  "india": {
+    "host": "geo.iproyal.com",
+    "port": 12321,
+    "username": "YOUR_IPROYAL_USERNAME_country-in",
+    "password": "YOUR_IPROYAL_PASSWORD",
+    "proxy_type": "http",
+    "country_code": "IN",
+    "reader_id": "INDIA"
+  }
+}
